@@ -1444,8 +1444,6 @@ void EW_SendBeginNewMatchEvent()
 	filter.AddAllPlayers();
 	g_gameEventSystem->PostEventAbstract(-1, false, &filter, pMsg, data, 0);
 	delete data;
-
-	//g_gameEventManager->FireEvent(pEvent);
 }
 
 // Hud command
