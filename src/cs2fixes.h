@@ -29,6 +29,8 @@
 struct CTakeDamageInfoContainer;
 class CCSPlayer_MovementServices;
 class CServerSideClient;
+class CCSPlayer_WeaponServices;
+class CBasePlayerWeapon;
 
 class CS2Fixes : public ISmmPlugin, public IMetamodListener
 {
@@ -68,6 +70,7 @@ public: //hooks
 	void Hook_GoToIntermission(bool bAbortedMatch);
 	bool Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer);
 	void Hook_CheckMovingGround(double frametime);
+	void Hook_DropWeaponPost(CBasePlayerWeapon* pWeapon, Vector* pVecTarget, Vector* pVelocity);
 	int Hook_LoadEventsFromFile(const char *filename, bool bSearchAll);
 
 public:

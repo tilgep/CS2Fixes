@@ -24,6 +24,7 @@
 #include "cs2_sdk/entity/cbaseentity.h"
 #include "plat.h"
 #include "entity/cgamerules.h"
+#include "entwatch.h"
 
 extern CGameConfig *g_GameConfig;
 extern CCSGameRules* g_pGameRules;
@@ -52,6 +53,9 @@ void CEntityListener::OnEntitySpawned(CEntityInstance* pEntity)
 	{
 		reinterpret_cast<CBaseEntity*>(pEntity)->SetCollisionGroup(COLLISION_GROUP_DEBRIS);
 	}
+
+	if (g_bEnableEntWatch)
+		EW_OnEntitySpawned(pEntity);
 }
 
 void CEntityListener::OnEntityCreated(CEntityInstance* pEntity)
@@ -64,6 +68,7 @@ void CEntityListener::OnEntityCreated(CEntityInstance* pEntity)
 
 void CEntityListener::OnEntityDeleted(CEntityInstance* pEntity)
 {
+	EW_OnEntityDeleted(pEntity);
 }
 
 void CEntityListener::OnEntityParentChanged(CEntityInstance* pEntity, CEntityInstance* pNewParent)

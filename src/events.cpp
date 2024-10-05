@@ -30,6 +30,7 @@
 #include "leader.h"
 #include "recipientfilters.h"
 #include "panoramavote.h"
+#include "entwatch.h"
 
 #include "tier0/memdbgon.h"
 
@@ -108,6 +109,9 @@ GAME_EVENT_F(round_prestart)
 
 	if (g_bEnableZR)
 		ZR_OnRoundPrestart(pEvent);
+
+	if (g_bEnableEntWatch)
+		EW_RoundPreStart();
 }
 
 static bool g_bBlockTeamMessages = false;
@@ -202,6 +206,9 @@ GAME_EVENT_F(player_death)
 {
 	if (g_bEnableZR)
 		ZR_OnPlayerDeath(pEvent);
+
+	if (g_bEnableEntWatch)
+		EW_PlayerDeath(pEvent);
 
 	if (!g_bEnableTopDefender)
 		return;

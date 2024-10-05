@@ -34,6 +34,7 @@
 #include "leader.h"
 #include "tier0/vprof.h"
 #include "networksystem/inetworkmessages.h"
+#include "entwatch.h"
 
 #include "tier0/memdbgon.h"
 
@@ -565,6 +566,9 @@ void CPlayerManager::OnClientDisconnect(CPlayerSlot slot)
 
 	g_pUserPreferencesSystem->PushPreferences(slot.Get());
 	g_pUserPreferencesSystem->ClearPreferences(slot.Get());
+
+	if (g_bEnableEntWatch)
+		EW_PlayerDisconnect(slot.Get());
 
 	delete m_vecPlayers[slot.Get()];
 	m_vecPlayers[slot.Get()] = nullptr;

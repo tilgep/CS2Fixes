@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Gravity Magic"
+    "shortname": "Gravity",
+    "hammerid": "12345",
+    "message": true,
+    "ui": true,
+    "transfer": true,
+    "color": "purple",
+    "handlers": [
+      {
+        "type": "button",
+        "hammerid": "buttonhammerid",
+        "event": "OnPressed",
+        "mode": 2,
+        "cooldown": 60,
+        "maxuses": 0,
+        "message": true,
+        "ui": true
+      }
+    ],
+    "triggers": ["3333", "22222"]
+  },
+  {
+	"name": "Item 2",
+	//  ...
+  }
+]
