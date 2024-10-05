@@ -173,6 +173,9 @@
     <ClCompile Include="sdk\public\tier0\memoverride.cpp">
       <Filter>Source Files\sdk</Filter>
     </ClCompile>
+    <ClCompile Include="src\entwatch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\mempatch.h">
@@ -348,6 +351,15 @@
     </ClInclude>
     <ClInclude Include="src\cs2_sdk\entity\cenvhudhint.h">
       <Filter>Header Files\cs2_sdk\entity</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cs2_sdk\entity\cbasebutton.h">
+      <Filter>Header Files\cs2_sdk\entity</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cs2_sdk\entity\cbasetoggle.h">
+      <Filter>Header Files\cs2_sdk\entity</Filter>
+    </ClInclude>
+    <ClInclude Include="src\entwatch.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

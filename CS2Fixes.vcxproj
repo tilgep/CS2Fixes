@@ -195,6 +195,7 @@
     <ClCompile Include="src\detours.cpp" />
     <ClCompile Include="src\discord.cpp" />
     <ClCompile Include="src\entities.cpp" />
+    <ClCompile Include="src\entwatch.cpp" />
     <ClCompile Include="src\events.cpp" />
     <ClCompile Include="src\gameconfig.cpp" />
     <ClCompile Include="src\gamesystem.cpp" />
@@ -221,10 +222,12 @@
     <ClInclude Include="src\common.h" />
     <ClInclude Include="src\cs2fixes.h" />
     <ClInclude Include="src\cs2_sdk\cschemasystem.h" />
+    <ClInclude Include="src\cs2_sdk\entity\cbasebutton.h" />
     <ClInclude Include="src\cs2_sdk\entity\cbaseentity.h" />
     <ClInclude Include="src\cs2_sdk\entity\cbasemodelentity.h" />
     <ClInclude Include="src\cs2_sdk\entity\cbaseplayercontroller.h" />
     <ClInclude Include="src\cs2_sdk\entity\cbaseplayerpawn.h" />
+    <ClInclude Include="src\cs2_sdk\entity\cbasetoggle.h" />
     <ClInclude Include="src\cs2_sdk\entity\cbasetrigger.h" />
     <ClInclude Include="src\cs2_sdk\entity\ccollisionproperty.h" />
     <ClInclude Include="src\cs2_sdk\entity\ccsplayercontroller.h" />
@@ -251,6 +254,7 @@
     <ClInclude Include="src\detours.h" />
     <ClInclude Include="src\discord.h" />
     <ClInclude Include="src\entities.h" />
+    <ClInclude Include="src\entwatch.h" />
     <ClInclude Include="src\eventlistener.h" />
     <ClInclude Include="src\gamesystem.h" />
     <ClInclude Include="src\gameconfig.h" />
