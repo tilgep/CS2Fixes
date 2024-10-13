@@ -124,7 +124,6 @@ struct EWItemInstance : EWItem	/* Current instance of defined items */
 	bool bDropping;
 	bool bAllowDrop; /* Whether this item should drop on death/disconnect only false for knife items */
 	char sClantag[64];
-	int iOwnerPreviousScore;
 	bool bHasThisClantag;
 
 public:
@@ -134,7 +133,6 @@ public:
 		iWeaponEnt(iWeapon),
 		bDropping(false),
 		bAllowDrop(true),
-		iOwnerPreviousScore(0),
 		bHasThisClantag(false) {};
 	bool RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType);
 	bool RemoveHandler(CBaseEntity* pEnt);
