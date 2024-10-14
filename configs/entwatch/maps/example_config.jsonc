@@ -7,6 +7,7 @@
     "ui": true,
     "transfer": true,
     "color": "purple",
+    "templated": true, // only set false if the weapon is NOT in a template
     "handlers": [
       {
         "type": "button",
@@ -16,7 +17,8 @@
         "cooldown": 60,
         "maxuses": 0,
         "message": true,
-        "ui": true
+        "ui": true,
+        "templated": true // only set false if this entity is NOT in a template
       }
     ],
     "triggers": ["3333", "22222"]

@@ -91,18 +91,20 @@ void EWItemHandler::SetDefaultValues()
 	iMaxuses = 0;
 	bShowUse = true;
 	bShowHud = true;
+	templated = Template_Auto;
 }
 
 void EWItemHandler::Print()
 {
-	Message("type: %d\n", (int)type);
-	Message("mode: %d\n", (int)mode);
-	Message("hammerid: %s\n", szHammerid.c_str());
-	Message("event: %s\n", szOutput.c_str());
-	Message("cooldown: %d\n", iCooldown);
-	Message("maxuses: %d\n", iMaxuses);
-	Message("bshowuse: %s\n", bShowUse ? "True" : "False");
-	Message("bshowhud: %s\n", bShowHud ? "True" : "False");
+	Message("     type: %d\n", (int)type);
+	Message("     mode: %d\n", (int)mode);
+	Message(" hammerid: %s\n", szHammerid.c_str());
+	Message("    event: %s\n", szOutput.c_str());
+	Message(" cooldown: %d\n", iCooldown);
+	Message("  maxuses: %d\n", iMaxuses);
+	Message(" bshowuse: %s\n", bShowUse ? "True" : "False");
+	Message(" bshowhud: %s\n", bShowHud ? "True" : "False");
+	Message("templated: %d\n", (int)templated);
 }
 
 EWItemHandler::EWItemHandler(EWItemHandler* pOther)
@@ -115,6 +117,7 @@ EWItemHandler::EWItemHandler(EWItemHandler* pOther)
 	iMaxuses = pOther->iMaxuses;
 	bShowUse = pOther->bShowUse;
 	bShowHud = pOther->bShowHud;
+	templated = pOther->templated;
 
 	pItem = pOther->pItem;
 	iEntIndex = -1;
@@ -157,6 +160,9 @@ EWItemHandler::EWItemHandler(ordered_json jsonKeys)
 
 	if (jsonKeys.contains("ui"))
 		bShowHud = jsonKeys["ui"].get<bool>();
+
+	if (jsonKeys.contains("templated"))
+		templated = jsonKeys["templated"].get<bool>() ? Template_Yes : Template_No;
 }
 
 void EWItemHandler::RemoveHook()
@@ -198,6 +204,7 @@ void EWItem::SetDefaultValues()
 	bShowPickup = true;
 	bShowHud = true;
 	bTransfer = true;
+	templated = Template_Auto;
 	vecHandlers.Purge();
 	vecTriggers.Purge();
 }
@@ -246,6 +253,7 @@ EWItem::EWItem(EWItem* pItem)
 	bShowPickup = pItem->bShowPickup;
 	bShowHud = pItem->bShowHud;
 	bTransfer = pItem->bTransfer;
+	templated = pItem->templated;
 
 	vecHandlers.Purge();
 	FOR_EACH_VEC(pItem->vecHandlers, i)
@@ -290,6 +298,9 @@ EWItem::EWItem(ordered_json jsonKeys)
 	if (jsonKeys.contains("transfer"))
 		bTransfer = jsonKeys["transfer"].get<bool>();
 
+	if (jsonKeys.contains("templated"))
+		templated = jsonKeys["templated"].get<bool>() ? Template_Yes : Template_No;
+
 	if (jsonKeys.contains("triggers"))
 	{
 		if (jsonKeys["triggers"].size() > 0)
@@ -319,24 +330,42 @@ EWItem::EWItem(ordered_json jsonKeys)
 }
 
 // true: found a matching handler for this ent, false: didnt
-bool EWItemInstance::RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType)
+bool EWItemInstance::RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType, int iHandlerTemplateNum)
 {
 	FOR_EACH_VEC(vecHandlers, i)
 	{
-		if (vecHandlers[i]->iEntIndex != -1)
+		EWItemHandler* handler = vecHandlers[i];
+		if (handler->iEntIndex != -1)
 			continue; // this handler is already setup
 
 		// Check handler type
-		if (vecHandlers[i]->type != entType)
+		if (handler->type != entType)
 			continue;
 
 		// check handler id
 		std::string hammerid = pEnt->m_sUniqueHammerID.Get().String();
-		if (vecHandlers[i]->szHammerid != hammerid)
+		if (handler->szHammerid != hammerid)
 			continue;
 
-		vecHandlers[i]->RegisterEntity(pEnt);
-		vecHandlers[i]->pItem = this;
+		// check template numbers
+
+		// if handler is specifically not templated then register
+		if (handler->templated != Template_No)
+		{
+			// if weapon is not templated then we cant compare template numbers
+			// so just register
+			if (templated == Template_Yes)
+			{
+				if (iTemplateNum != iHandlerTemplateNum)
+				{
+					//Message("template numbers do not match [item:%d   handler:%d]\n", iTemplateNum, iHandlerTemplateNum);
+					continue;
+				}
+			}
+		}
+
+		handler->RegisterEntity(pEnt);
+		handler->pItem = this;
 		return true;
 	}
 	return false;
@@ -741,9 +770,10 @@ int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransfer
 
 void CEWHandler::RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType)
 {
+	int templatenum = GetTemplateSuffixNumber(pEnt->GetName());
 	FOR_EACH_VEC(vecItems, i)
 	{
-		if (vecItems[i]->RegisterHandler(pEnt, entType))
+		if (vecItems[i]->RegisterHandler(pEnt, entType, templatenum))
 		{
 			Message("REGISTERED HANDLER. Instance:%d  entindex:%d  type:%d\n", i + 1, pEnt->entindex(), (int)entType);
 			return;
@@ -924,6 +954,20 @@ void CEWHandler::RegisterItem(int itemId, CBasePlayerWeapon* pWeapon)
 
 	bool bKnife = pWeapon->GetWeaponVData()->m_GearSlot() == GEAR_SLOT_KNIFE;
 	instance->bAllowDrop = !bKnife;
+	
+	if (instance->templated != Template_No)
+	{
+		int templatenum = GetTemplateSuffixNumber(pWeapon->GetName());
+		if (templatenum == -1)
+		{
+			instance->templated = Template_No;
+		}
+		else
+		{
+			instance->templated = Template_Yes;
+			instance->iTemplateNum = templatenum;
+		}
+	}
 
 	vecItems.AddToTail(instance);
 }
@@ -1442,6 +1486,42 @@ void EW_SendBeginNewMatchEvent()
 	delete data;
 }
 
+/* Gets the trailing number on a given string in the form XXXXXX_1
+   Used ingame as the template suffix
+   which gets added to entities spawned from a template
+ * Returns -1 if not found
+ */
+int GetTemplateSuffixNumber(const char* szName)
+{
+	size_t len = strlen(szName);
+	
+	// needs at least 3 characters to include the suffix
+	if (len < 3)
+		return -1;
+
+	int i = len - 1;
+
+	// doesnt end with a number so wasnt templated
+	if (!isdigit(szName[i]))
+		return -1;
+
+	while (i >= 0 && isdigit(szName[i])) 
+	{
+		i--;
+	}
+
+	// if the first character is the first non-number then it wasnt templated
+	if (i <= 0)
+		return -1;
+
+	if (szName[i] == '_')
+	{
+		return V_StringToInt64(szName + i + 1, -1);
+	}
+
+	return -1;
+}
+
 // Hud command
 #if 0
 CON_COMMAND_CHAT(hud, "Toggle EntWatch HUD")
@@ -1813,4 +1893,41 @@ CON_COMMAND_CHAT(ew_dump, "Prints the currently loaded config to console")
 	}
 
 	g_pEWHandler->PrintLoadedConfig(player->GetPlayerSlot());
+}
+
+CON_COMMAND_CHAT(ew_items, "Show all current item instance info")
+{
+	if (!g_bEnableEntWatch)
+		return;
+
+	if (!g_pEWHandler)
+	{
+		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "There has been an error initialising entwatch.");
+		return;
+	}
+
+	if (g_pEWHandler->vecItems.Count() < 1)
+	{
+		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "No item instances currently.");
+		return;
+	}
+
+	FOR_EACH_VEC(g_pEWHandler->vecItems, i)
+	{
+		EWItemInstance* item = g_pEWHandler->vecItems[i];
+		CBaseEntity* weapon = (CBaseEntity*)g_pEntitySystem->GetEntityInstance((CEntityIndex)item->iWeaponEnt);
+
+		ClientPrint(player, HUD_PRINTCONSOLE, "------- Item instance %d -------", i);
+		ClientPrint(player, HUD_PRINTCONSOLE, "Item name: %s", item->szItemName.c_str());
+		ClientPrint(player, HUD_PRINTCONSOLE, "[Weapon] entindex: %d   targetname: %s", item->iWeaponEnt, weapon->GetName());
+		FOR_EACH_VEC(item->vecHandlers, j)
+		{
+			EWItemHandler* handler = item->vecHandlers[j];
+			CBaseEntity* handlerent = (CBaseEntity*)g_pEntitySystem->GetEntityInstance((CEntityIndex)handler->iEntIndex);
+			ClientPrint(player, HUD_PRINTCONSOLE, "    ----- handler %d -----", j);
+			ClientPrint(player, HUD_PRINTCONSOLE, "    entindex: %d", handler->iEntIndex);
+			ClientPrint(player, HUD_PRINTCONSOLE, "    targetname: %s", handlerent->GetName());
+		}
+		ClientPrint(player, HUD_PRINTCONSOLE, "------- --------------- -------");
+	}
 }

@@ -67,6 +67,13 @@ enum EWHudMode
 	Hud_ItemOnly,
 };
 
+enum EWTemplated
+{
+	Template_Auto = -1,
+	Template_No,
+	Template_Yes,
+};
+
 struct EWItemInstance;
 struct EWItemHandler
 {
@@ -79,6 +86,7 @@ struct EWItemHandler
 	int iMaxuses;
 	bool bShowUse;			/* Whether to show when this is used */
 	bool bShowHud;			/* Track this cd/uses on hud/scoreboard */
+	EWTemplated templated;		/* Is this entity templated (should we check for template suffix) */
 
 	// Instance variables
 	EWItemInstance* pItem;
@@ -107,6 +115,7 @@ struct EWItem
 	bool bShowPickup;				/* Whether to show pickup/drop messages in chat */
 	bool bShowHud;					/* Whether to show this item on hud/scoreboard */
 	bool bTransfer;					/* Can this item be transferred */
+	EWTemplated templated;				/* Is this item templated (should we check for template suffix) */
 	CUtlVector<EWItemHandler*> vecHandlers;		/* List of item abilities */
 	CUtlVector<std::string*> vecTriggers;		/* HammerIds of triggers associated with this item */
 
@@ -121,6 +130,7 @@ struct EWItemInstance : EWItem	/* Current instance of defined items */
 {
 	int iOwnerSlot; /* Slot of the current holder */
 	int iWeaponEnt;
+	int iTemplateNum;
 	bool bDropping;
 	bool bAllowDrop; /* Whether this item should drop on death/disconnect only false for knife items */
 	char sClantag[64];
@@ -131,10 +141,11 @@ public:
 		EWItem(pItem),
 		iOwnerSlot(-1),
 		iWeaponEnt(iWeapon),
+		iTemplateNum(-1),
 		bDropping(false),
 		bAllowDrop(true),
 		bHasThisClantag(false) {};
-	bool RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType);
+	bool RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType, int iHandlerTemplateNum);
 	bool RemoveHandler(CBaseEntity* pEnt);
 	int FindHandlerByEntIndex(int indexToFind);
 	
@@ -226,5 +237,5 @@ void EW_DropWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon*
 void EW_PlayerDeath(IGameEvent* pEvent);
 void EW_PlayerDisconnect(int slot);
 void EW_SendBeginNewMatchEvent();
-
+int GetTemplateSuffixNumber(const char* szName);
 //float EW_UpdateHud();
