@@ -91,7 +91,7 @@ void EWItemHandler::SetDefaultValues()
 	iMaxuses = 0;
 	bShowUse = true;
 	bShowHud = true;
-	templated = Template_Auto;
+	templated = EWCfg_Auto;
 }
 
 void EWItemHandler::Print()
@@ -162,7 +162,7 @@ EWItemHandler::EWItemHandler(ordered_json jsonKeys)
 		bShowHud = jsonKeys["ui"].get<bool>();
 
 	if (jsonKeys.contains("templated"))
-		templated = jsonKeys["templated"].get<bool>() ? Template_Yes : Template_No;
+		templated = jsonKeys["templated"].get<bool>() ? EWCfg_Yes : EWCfg_No;
 }
 
 void EWItemHandler::RemoveHook()
@@ -203,8 +203,8 @@ void EWItem::SetDefaultValues()
 	V_strcpy(sChatColor, "\x01");
 	bShowPickup = true;
 	bShowHud = true;
-	bTransfer = true;
-	templated = Template_Auto;
+	transfer = EWCfg_Auto;
+	templated = EWCfg_Auto;
 	vecHandlers.Purge();
 	vecTriggers.Purge();
 }
@@ -252,7 +252,7 @@ EWItem::EWItem(EWItem* pItem)
 	V_strcpy(sChatColor, pItem->sChatColor);
 	bShowPickup = pItem->bShowPickup;
 	bShowHud = pItem->bShowHud;
-	bTransfer = pItem->bTransfer;
+	transfer = pItem->transfer;
 	templated = pItem->templated;
 
 	vecHandlers.Purge();
@@ -296,10 +296,10 @@ EWItem::EWItem(ordered_json jsonKeys)
 		bShowHud = jsonKeys["ui"].get<bool>();
 
 	if (jsonKeys.contains("transfer"))
-		bTransfer = jsonKeys["transfer"].get<bool>();
+		transfer = jsonKeys["transfer"].get<bool>() ? EWCfg_Yes : EWCfg_No;
 
 	if (jsonKeys.contains("templated"))
-		templated = jsonKeys["templated"].get<bool>() ? Template_Yes : Template_No;
+		templated = jsonKeys["templated"].get<bool>() ? EWCfg_Yes : EWCfg_No;
 
 	if (jsonKeys.contains("triggers"))
 	{
@@ -350,11 +350,11 @@ bool EWItemInstance::RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entTyp
 		// check template numbers
 
 		// if handler is specifically not templated then register
-		if (handler->templated != Template_No)
+		if (handler->templated != EWCfg_No)
 		{
 			// if weapon is not templated then we cant compare template numbers
 			// so just register
-			if (templated == Template_Yes)
+			if (templated == EWCfg_Yes)
 			{
 				if (iTemplateNum != iHandlerTemplateNum)
 				{
@@ -655,7 +655,12 @@ void CEWHandler::PrintLoadedConfig(CPlayerSlot slot)
 		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX " Hammerid:  %s", item->szHammerid.c_str());
 		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "  Message:  %s", item->bShowPickup ? "True" : "False");
 		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "       UI:  %s", item->bShowHud ? "True" : "False");
-		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX " Transfer:  %s", item->bTransfer ? "True" : "False");
+		if (item->transfer == EWCfg_Auto)
+			ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX " Transfer:  Auto");
+		else if (item->transfer == EWCfg_Yes)
+			ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX " Transfer:  True");
+		else
+			ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX " Transfer:  False");
 
 		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX " ");
 		if (item->vecHandlers.Count() == 0)
@@ -725,7 +730,7 @@ int CEWHandler::FindItemInstanceByOwner(int iOwnerSlot, bool bOnlyTransferrable,
 {
 	for (int i = iStartItem; i < vecItems.Count(); i++)
 	{
-		if (bOnlyTransferrable && !vecItems[i]->bTransfer)
+		if (bOnlyTransferrable && vecItems[i]->transfer == EWCfg_No)
 			continue;
 
 		if (vecItems[i]->iOwnerSlot == iOwnerSlot)
@@ -743,7 +748,7 @@ int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransfer
 
 	FOR_EACH_VEC(vecItems, i)
 	{
-		if (bOnlyTransferrable && !vecItems[i]->bTransfer)
+		if (bOnlyTransferrable && vecItems[i]->transfer == EWCfg_No)
 			continue;
 
 		std::string itemname = "";
@@ -954,17 +959,23 @@ void CEWHandler::RegisterItem(int itemId, CBasePlayerWeapon* pWeapon)
 
 	bool bKnife = pWeapon->GetWeaponVData()->m_GearSlot() == GEAR_SLOT_KNIFE;
 	instance->bAllowDrop = !bKnife;
-	
-	if (instance->templated != Template_No)
+
+	// Auto detect transfer, allow transfer if not knife
+	if (instance->transfer == EWCfg_Auto)
+	{
+		instance->transfer = bKnife ? EWCfg_No : EWCfg_Yes;
+	}
+
+	if (instance->templated != EWCfg_No)
 	{
 		int templatenum = GetTemplateSuffixNumber(pWeapon->GetName());
 		if (templatenum == -1)
 		{
-			instance->templated = Template_No;
+			instance->templated = EWCfg_No;
 		}
 		else
 		{
-			instance->templated = Template_Yes;
+			instance->templated = EWCfg_Yes;
 			instance->iTemplateNum = templatenum;
 		}
 	}
@@ -1320,9 +1331,7 @@ void EW_OnEntitySpawned(CEntityInstance* pEntity)
 				g_pEWHandler->RegisterHandler(hEntity.Get(), type);
 			return -1.0;
 			});
-
 	}
-
 }
 
 void EW_OnEntityDeleted(CEntityInstance* pEntity)
@@ -1494,7 +1503,7 @@ void EW_SendBeginNewMatchEvent()
 int GetTemplateSuffixNumber(const char* szName)
 {
 	size_t len = strlen(szName);
-	
+
 	// needs at least 3 characters to include the suffix
 	if (len < 3)
 		return -1;
@@ -1505,7 +1514,7 @@ int GetTemplateSuffixNumber(const char* szName)
 	if (!isdigit(szName[i]))
 		return -1;
 
-	while (i >= 0 && isdigit(szName[i])) 
+	while (i >= 0 && isdigit(szName[i]))
 	{
 		i--;
 	}
@@ -1763,7 +1772,9 @@ CON_COMMAND_CHAT_FLAGS(etransfer, "Transfer an EntWatch item", ADMFLAG_GENERIC)
 			}
 		}
 
+		// TODO: null check but also fix it in ew_onweapondeleted
 		CBasePlayerWeapon* pItemWeapon = (CBasePlayerWeapon*)g_pEntitySystem->GetEntityInstance((CEntityIndex)g_pEWHandler->vecItems[iItemInstance]->iWeaponEnt);
+
 		gear_slot_t itemSlot = pItemWeapon->GetWeaponVData()->m_GearSlot();
 
 		// Make current item owner drop the item weapon
@@ -1893,41 +1904,4 @@ CON_COMMAND_CHAT(ew_dump, "Prints the currently loaded config to console")
 	}
 
 	g_pEWHandler->PrintLoadedConfig(player->GetPlayerSlot());
-}
-
-CON_COMMAND_CHAT(ew_items, "Show all current item instance info")
-{
-	if (!g_bEnableEntWatch)
-		return;
-
-	if (!g_pEWHandler)
-	{
-		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "There has been an error initialising entwatch.");
-		return;
-	}
-
-	if (g_pEWHandler->vecItems.Count() < 1)
-	{
-		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "No item instances currently.");
-		return;
-	}
-
-	FOR_EACH_VEC(g_pEWHandler->vecItems, i)
-	{
-		EWItemInstance* item = g_pEWHandler->vecItems[i];
-		CBaseEntity* weapon = (CBaseEntity*)g_pEntitySystem->GetEntityInstance((CEntityIndex)item->iWeaponEnt);
-
-		ClientPrint(player, HUD_PRINTCONSOLE, "------- Item instance %d -------", i);
-		ClientPrint(player, HUD_PRINTCONSOLE, "Item name: %s", item->szItemName.c_str());
-		ClientPrint(player, HUD_PRINTCONSOLE, "[Weapon] entindex: %d   targetname: %s", item->iWeaponEnt, weapon->GetName());
-		FOR_EACH_VEC(item->vecHandlers, j)
-		{
-			EWItemHandler* handler = item->vecHandlers[j];
-			CBaseEntity* handlerent = (CBaseEntity*)g_pEntitySystem->GetEntityInstance((CEntityIndex)handler->iEntIndex);
-			ClientPrint(player, HUD_PRINTCONSOLE, "    ----- handler %d -----", j);
-			ClientPrint(player, HUD_PRINTCONSOLE, "    entindex: %d", handler->iEntIndex);
-			ClientPrint(player, HUD_PRINTCONSOLE, "    targetname: %s", handlerent->GetName());
-		}
-		ClientPrint(player, HUD_PRINTCONSOLE, "------- --------------- -------");
-	}
 }

@@ -67,11 +67,11 @@ enum EWHudMode
 	Hud_ItemOnly,
 };
 
-enum EWTemplated
+enum EWAutoConfigOption
 {
-	Template_Auto = -1,
-	Template_No,
-	Template_Yes,
+	EWCfg_Auto = -1,
+	EWCfg_No,
+	EWCfg_Yes,
 };
 
 struct EWItemInstance;
@@ -86,7 +86,7 @@ struct EWItemHandler
 	int iMaxuses;
 	bool bShowUse;			/* Whether to show when this is used */
 	bool bShowHud;			/* Track this cd/uses on hud/scoreboard */
-	EWTemplated templated;		/* Is this entity templated (should we check for template suffix) */
+	EWAutoConfigOption templated;		/* Is this entity templated (should we check for template suffix) */
 
 	// Instance variables
 	EWItemInstance* pItem;
@@ -95,13 +95,13 @@ struct EWItemHandler
 	int iCurrentUses;
 	int iCounterValue;
 	int iCounterMax;
-	
+
 	void SetDefaultValues();
 	void Print();
 public:
 	EWItemHandler(EWItemHandler* pOther);
 	EWItemHandler(ordered_json jsonKeys);
-	
+
 	void RemoveHook();
 	void RegisterEntity(CBaseEntity* pEnt);
 };
@@ -114,8 +114,8 @@ struct EWItem
 	char sChatColor[2];
 	bool bShowPickup;				/* Whether to show pickup/drop messages in chat */
 	bool bShowHud;					/* Whether to show this item on hud/scoreboard */
-	bool bTransfer;					/* Can this item be transferred */
-	EWTemplated templated;				/* Is this item templated (should we check for template suffix) */
+	EWAutoConfigOption transfer;					/* Can this item be transferred */
+	EWAutoConfigOption templated;				/* Is this item templated (should we check for template suffix) */
 	CUtlVector<EWItemHandler*> vecHandlers;		/* List of item abilities */
 	CUtlVector<std::string*> vecTriggers;		/* HammerIds of triggers associated with this item */
 
@@ -148,7 +148,7 @@ public:
 	bool RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType, int iHandlerTemplateNum);
 	bool RemoveHandler(CBaseEntity* pEnt);
 	int FindHandlerByEntIndex(int indexToFind);
-	
+
 	void Pickup(int slot);
 	void Drop(EWDropReason reason, CCSPlayerController* pController);
 };
@@ -165,7 +165,7 @@ public:
 		iStartTouchHookId = -1;
 		iTouchHookId = -1;
 		iEndTouchHookId = -1;
-		for (int i = 0; i < MAXPLAYERS+1; i++)
+		for (int i = 0; i < MAXPLAYERS + 1; i++)
 		{
 			m_bEbanned[i] = false;
 		}
@@ -178,7 +178,7 @@ public:
 
 	void UnLoadConfig();
 	void LoadMapConfig(const char* sMapName);
-	void LoadConfig(const char* sFilePath);		
+	void LoadConfig(const char* sFilePath);
 
 	void PrintLoadedConfig(int iSlot) { PrintLoadedConfig(CPlayerSlot(iSlot)); };
 	void PrintLoadedConfig(CPlayerSlot slot);
@@ -208,7 +208,7 @@ public:
 
 	CUtlMap<uint32, EWItem*> mapItemConfig;		/* items defined in the config */
 	CUtlVector<EWItemInstance*> vecItems;						/* all items found spawned */
-	
+
 	CUtlVector<CHandle<CBaseEntity>> vecHookedTriggers;
 	int iStartTouchHookId;
 	int iTouchHookId;
@@ -220,7 +220,7 @@ public:
 	bool m_bHudTicking;
 
 	// TODO: Move to player class
-	bool m_bEbanned[MAXPLAYERS+1];
+	bool m_bEbanned[MAXPLAYERS + 1];
 };
 
 extern CEWHandler* g_pEWHandler;
