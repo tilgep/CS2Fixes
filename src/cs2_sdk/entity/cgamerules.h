@@ -68,6 +68,7 @@ public:
 	SCHEMA_FIELD(int, m_nEndMatchMapVoteWinner)
 	SCHEMA_FIELD(int, m_iRoundTime)
 	SCHEMA_FIELD(bool, m_bGameRestart)
+	SCHEMA_FIELD(bool, m_bFreezePeriod)
 	SCHEMA_FIELD_POINTER(CUtlVector<SpawnPoint*>, m_CTSpawnPoints)
 	SCHEMA_FIELD_POINTER(CUtlVector<SpawnPoint*>, m_TerroristSpawnPoints)
 

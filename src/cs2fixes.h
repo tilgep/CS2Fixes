@@ -31,6 +31,7 @@ class CCSPlayer_MovementServices;
 class CServerSideClient;
 class CCSPlayer_WeaponServices;
 class CBasePlayerWeapon;
+struct TouchLinked_t;
 
 class CS2Fixes : public ISmmPlugin, public IMetamodListener
 {
@@ -69,6 +70,14 @@ public: //hooks
 	void Hook_CreateWorkshopMapGroup(const char* name, const CUtlStringList& mapList);
 	void Hook_GoToIntermission(bool bAbortedMatch);
 	bool Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer);
+	void Hook_PhysicsTouchShuffle(CUtlVector<TouchLinked_t>* pList, bool unknown);
+#ifdef PLATFORM_WINDOWS
+	Vector* Hook_GetEyePosition(Vector*);
+	QAngle* Hook_GetEyeAngles(QAngle*);
+#else
+	Vector Hook_GetEyePosition();
+	QAngle Hook_GetEyeAngles();
+#endif
 	void Hook_CheckMovingGround(double frametime);
 	void Hook_DropWeaponPost(CBasePlayerWeapon* pWeapon, Vector* pVecTarget, Vector* pVelocity);
 	int Hook_LoadEventsFromFile(const char *filename, bool bSearchAll);

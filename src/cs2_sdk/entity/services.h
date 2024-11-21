@@ -23,6 +23,12 @@
 #include <entity/ccsweaponbase.h>
 #include <entity/ccsplayerpawn.h>
 
+#define AMMO_OFFSET_HEGRENADE		13
+#define AMMO_OFFSET_FLASHBANG		14
+#define AMMO_OFFSET_SMOKEGRENADE	15
+#define AMMO_OFFSET_MOLOTOV			16
+#define AMMO_OFFSET_DECOY			17
+
 class CBaseEntity;
 
 struct CSPerRoundStats_t
@@ -110,6 +116,7 @@ public:
 
 	SCHEMA_FIELD_POINTER(CUtlVector<CHandle<CBasePlayerWeapon>>, m_hMyWeapons)
 	SCHEMA_FIELD(CHandle<CBasePlayerWeapon>, m_hActiveWeapon)
+	SCHEMA_FIELD_POINTER(uint16_t, m_iAmmo)
 };
 
 class CCSPlayer_WeaponServices : public CPlayer_WeaponServices
@@ -225,3 +232,23 @@ public:
 	SCHEMA_FIELD(ObserverMode_t, m_iObserverLastMode)
 	SCHEMA_FIELD(bool, m_bForcedObserverMode)
 };
+
+class CPlayer_CameraServices
+{
+public:
+    DECLARE_SCHEMA_CLASS(CPlayer_CameraServices)
+
+    SCHEMA_FIELD(CHandle<CBaseEntity>, m_hViewEntity)
+};
+
+class CCSPlayerBase_CameraServices : public CPlayer_CameraServices
+{
+public:
+    DECLARE_SCHEMA_CLASS(CCSPlayerBase_CameraServices)
+
+    SCHEMA_FIELD(CHandle<CBaseEntity>, m_hZoomOwner)
+    SCHEMA_FIELD(uint, m_iFOV)
+};
+
+class CCSPlayer_CameraServices : public CCSPlayerBase_CameraServices
+{};

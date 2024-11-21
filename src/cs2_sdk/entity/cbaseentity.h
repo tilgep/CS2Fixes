@@ -34,6 +34,7 @@ extern CGameConfig *g_GameConfig;
 
 class CGameUI;
 class CEnvHudHint;
+class CPointViewControl;
 
 class CGameSceneNode
 {
@@ -287,6 +288,27 @@ public:
 	{
 		if (V_strcasecmp(GetClassname(), "env_hudhint") == 0)
 			return reinterpret_cast<CEnvHudHint *>(this);
+
+		return nullptr;
+	}
+
+	[[nodiscard]] CPointViewControl *AsPointViewControl()
+	{
+		if (V_strcasecmp(GetClassname(), "logic_relay") != 0)
+			return nullptr;
+
+		const auto tag = m_iszPrivateVScripts.IsValid() ? m_iszPrivateVScripts.String() : nullptr;
+
+		if (tag && V_strcasecmp(tag, "point_viewcontrol") == 0)
+			return reinterpret_cast<CPointViewControl *>(this);
+
+		return nullptr;
+	}
+
+	[[nodiscard]] CBaseModelEntity* AsBaseModelEntity()
+	{
+		if (const auto pCollision = this->m_pCollision())
+			return reinterpret_cast<CBaseModelEntity*>(this);
 
 		return nullptr;
 	}
