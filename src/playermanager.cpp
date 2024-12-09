@@ -44,6 +44,7 @@ extern IVEngineServer2 *g_pEngineServer2;
 extern CGameEntitySystem *g_pEntitySystem;
 extern CGlobalVars *gpGlobals;
 extern IGameEventSystem* g_gameEventSystem;
+extern CUtlVector<CServerSideClient*>* GetClientList();
 
 static int g_iAdminImmunityTargetting = 0;
 static bool g_bEnableMapSteamIds = false;
@@ -530,6 +531,23 @@ void ZEPlayer::EndGlow()
 		addresses::UTIL_Remove(pModelParent);
 }
 
+void ZEPlayer::CycleButtonWatch()
+{
+	m_iButtonWatchMode = (m_iButtonWatchMode + 1) % 4;
+	g_pUserPreferencesSystem->SetPreferenceInt(m_slot.Get(), BUTTON_WATCH_PREF_KEY_NAME, m_iButtonWatchMode);
+}
+
+// 0: Off
+// 1: Chat
+// 2: Console
+// 3: Chat + Console
+int ZEPlayer::GetButtonWatchMode()
+{
+	if (!IsAdminFlagSet(ADMFLAG_GENERIC) || IsFakeClient())
+		return 0;
+	return g_pUserPreferencesSystem->GetPreferenceInt(m_slot.Get(), BUTTON_WATCH_PREF_KEY_NAME, m_iButtonWatchMode);
+}
+
 void ZEPlayer::SetSteamIdAttribute()
 {
 	if (!g_bEnableMapSteamIds)
@@ -611,6 +629,7 @@ bool CPlayerManager::OnClientConnected(CPlayerSlot slot, uint64 xuid, const char
 	ResetPlayerFlags(slot.Get());
 
 	g_pMapVoteSystem->ClearPlayerInfo(slot.Get());
+	g_pMapVoteSystem->ClearInvalidNominations();
 	
 	return true;
 }
@@ -631,6 +650,7 @@ void CPlayerManager::OnClientDisconnect(CPlayerSlot slot)
 	ResetPlayerFlags(slot.Get());
 
 	g_pMapVoteSystem->ClearPlayerInfo(slot.Get());
+	g_pMapVoteSystem->ClearInvalidNominations();
 
 	g_pPanoramaVoteHandler->RemovePlayerFromVote(slot.Get());
 }
@@ -1597,4 +1617,19 @@ void CPlayerManager::ResetPlayerFlags(int slot)
 	SetPlayerSilenceSound(slot, false);
 	SetPlayerStopDecals(slot, true);
 	SetPlayerNoShake(slot, false);
+}
+
+int CPlayerManager::GetOnlinePlayerCount(bool bCountBots)
+{
+	int iOnlinePlayers = 0;
+
+	for (int i = 0; i < GetClientList()->Count(); i++)
+	{
+		CServerSideClient* pClient = (*GetClientList())[i];
+
+		if (pClient && pClient->GetSignonState() >= SIGNONSTATE_CONNECTED && (bCountBots || !pClient->IsFakeClient()))
+			iOnlinePlayers++;
+	}
+
+	return iOnlinePlayers;
 }
