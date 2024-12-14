@@ -57,7 +57,8 @@ enum EWDropReason
 {
 	Drop,
 	Death,
-	Disconnect
+	Disconnect,
+	Deleted
 };
 
 enum EWHudMode
@@ -122,7 +123,7 @@ struct EWItem
 	void SetDefaultValues();
 	void ParseColor(std::string value);
 public:
-	EWItem(EWItem* pItem);
+	EWItem(std::shared_ptr<EWItem> pItem);
 	EWItem(ordered_json jsonKeys);
 };
 
@@ -137,13 +138,14 @@ struct EWItemInstance : EWItem	/* Current instance of defined items */
 	bool bHasThisClantag;
 
 public:
-	EWItemInstance(int iWeapon, EWItem* pItem) :
+	EWItemInstance(int iWeapon, std::shared_ptr<EWItem> pItem) :
 		EWItem(pItem),
 		iOwnerSlot(-1),
 		iWeaponEnt(iWeapon),
 		iTemplateNum(-1),
 		bDropping(false),
 		bAllowDrop(true),
+		sClantag(""),
 		bHasThisClantag(false) {};
 	bool RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType, int iHandlerTemplateNum);
 	bool RemoveHandler(CBaseEntity* pEnt);
@@ -199,6 +201,7 @@ public:
 	void ResetAllClantags();
 
 	void RegisterItem(int itemId, CBasePlayerWeapon* pWeapon);
+	void RemoveWeaponFromItem(int itemId);
 	void PlayerPickup(CCSPlayerPawn* pPawn, CBasePlayerWeapon* pPlayerWeapon);
 	void PlayerDrop(EWDropReason reason, int iItemInstance, CCSPlayerController* pController);
 
@@ -206,8 +209,8 @@ public:
 	void RemoveUseHook(CBaseEntity* pEnt);
 	void Hook_Use(InputData_t* pInput);
 
-	CUtlMap<uint32, EWItem*> mapItemConfig;		/* items defined in the config */
-	CUtlVector<EWItemInstance*> vecItems;						/* all items found spawned */
+	CUtlMap<uint32, std::shared_ptr<EWItem>> mapItemConfig;		/* items defined in the config */
+	CUtlVector<std::shared_ptr<EWItemInstance>> vecItems;		/* all items found spawned */
 
 	CUtlVector<CHandle<CBaseEntity>> vecHookedTriggers;
 	int iStartTouchHookId;

@@ -244,7 +244,7 @@ void EWItem::ParseColor(std::string value)
 		V_strcpy(sChatColor, "\x10");
 }
 
-EWItem::EWItem(EWItem* pItem)
+EWItem::EWItem(std::shared_ptr<EWItem> pItem)
 {
 	szItemName = pItem->szItemName;
 	szShortName = pItem->szShortName;
@@ -540,6 +540,7 @@ void EWItemInstance::Drop(EWDropReason reason, CCSPlayerController* pController)
 				ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "\x03%s\x05 disconnected with %s%s", pController->GetPlayerName(), sChatColor, szItemName.c_str());
 		}
 		break;
+	case EWDropReason::Deleted:
 	default:
 		break;
 	}
@@ -624,7 +625,8 @@ void CEWHandler::LoadConfig(const char* sFilePath)
 		}
 
 		std::string sHammerid = jsonItemData["hammerid"].get<std::string>();
-		EWItem* item = new EWItem(jsonItemData);
+		//EWItem* item = new EWItem(jsonItemData);
+		std::shared_ptr<EWItem> item = std::make_shared<EWItem>(jsonItemData);
 
 		mapItemConfig.Insert(hash_32_fnv1a_const(sHammerid.c_str()), item);
 	}
@@ -642,7 +644,7 @@ void CEWHandler::PrintLoadedConfig(CPlayerSlot slot)
 
 	FOR_EACH_MAP(mapItemConfig, i)
 	{
-		EWItem* item = mapItemConfig.Element(i);
+		std::shared_ptr<EWItem> item = mapItemConfig.Element(i);
 		if (!item)
 		{
 			ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "Null item int the item map at pos %d", i);
@@ -716,10 +718,17 @@ int CEWHandler::FindItemIdByWeapon(std::string sHammerid)
 	return (int)i;
 }
 
+/*
+ *	Finds the index of an item instance with a given entity index
+ *  Returns index into vecItems or -1 if not found
+ */
 int CEWHandler::FindItemInstanceByWeapon(int iWeaponEnt)
 {
 	FOR_EACH_VEC(vecItems, i)
 	{
+		if (vecItems[i]->iWeaponEnt == -1)
+			continue;
+
 		if (vecItems[i]->iWeaponEnt == iWeaponEnt)
 			return i;
 	}
@@ -731,6 +740,9 @@ int CEWHandler::FindItemInstanceByOwner(int iOwnerSlot, bool bOnlyTransferrable,
 	for (int i = iStartItem; i < vecItems.Count(); i++)
 	{
 		if (bOnlyTransferrable && vecItems[i]->transfer == EWCfg_No)
+			continue;
+
+		if (vecItems[i]->iWeaponEnt == -1)
 			continue;
 
 		if (vecItems[i]->iOwnerSlot == iOwnerSlot)
@@ -749,6 +761,9 @@ int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransfer
 	FOR_EACH_VEC(vecItems, i)
 	{
 		if (bOnlyTransferrable && vecItems[i]->transfer == EWCfg_No)
+			continue;
+
+		if (vecItems[i]->iWeaponEnt == -1)
 			continue;
 
 		std::string itemname = "";
@@ -790,7 +805,7 @@ bool CEWHandler::RegisterTrigger(CBaseEntity* pEnt)
 {
 	FOR_EACH_MAP_FAST(mapItemConfig, i)
 	{
-		EWItem* pItem = mapItemConfig.Element(i);
+		std::shared_ptr<EWItem> pItem = mapItemConfig.Element(i);
 		if (pItem->vecTriggers.Count() < 1)
 			continue;
 
@@ -951,9 +966,10 @@ void CEWHandler::ResetAllClantags()
 void CEWHandler::RegisterItem(int itemId, CBasePlayerWeapon* pWeapon)
 {
 	Message("Registering item %d (item instance:%d)\n", itemId, vecItems.Count() + 1);
-	EWItem* item = mapItemConfig.Element(itemId);
+	std::shared_ptr<EWItem> item = mapItemConfig.Element(itemId);
 
-	EWItemInstance* instance = new EWItemInstance(pWeapon->entindex(), item);
+	//EWItemInstance* instance = new EWItemInstance(pWeapon->entindex(), item);
+	std::shared_ptr<EWItemInstance> instance = std::make_shared<EWItemInstance>(pWeapon->entindex(), item);
 
 	V_snprintf(instance->sClantag, sizeof(EWItemInstance::sClantag), "[+]%s:", instance->szShortName.c_str());
 
@@ -981,6 +997,29 @@ void CEWHandler::RegisterItem(int itemId, CBasePlayerWeapon* pWeapon)
 	}
 
 	vecItems.AddToTail(instance);
+}
+
+// Weapon entity of specified item has been deleted
+void CEWHandler::RemoveWeaponFromItem(int itemId)
+{
+	std::shared_ptr<EWItemInstance> pItem = vecItems[itemId];
+	if (!pItem)
+	{
+		vecItems.Remove(itemId);
+		return;
+	}
+
+	// Use drop to handle clantag/score stuff
+	if (pItem->iOwnerSlot != -1)
+	{
+		CCSPlayerController* pOwner = CCSPlayerController::FromSlot(CPlayerSlot(pItem->iOwnerSlot));
+		if (pOwner)
+		{
+			pItem->Drop(EWDropReason::Deleted, pOwner);
+		}
+	}
+
+	pItem->iWeaponEnt = -1;
 }
 
 /* Player picked up a weapon in the config */
@@ -1024,7 +1063,7 @@ void CEWHandler::PlayerDrop(EWDropReason reason, int iItemInstance, CCSPlayerCon
 		if (iItemInstance == -1 || iItemInstance >= vecItems.Count())
 			return;
 
-		EWItemInstance* pItem = vecItems[iItemInstance];
+		std::shared_ptr<EWItemInstance> pItem = vecItems[iItemInstance];
 		if (!pItem)
 			return;
 
@@ -1124,7 +1163,7 @@ void CEWHandler::Hook_Use(InputData_t* pInput)
 	if (!pActivator || !pActivator->IsPawn())
 		RETURN_META(resVal);
 
-	EWItemInstance* pItem = vecItems[itemIndex];
+	std::shared_ptr<EWItemInstance> pItem = vecItems[itemIndex];
 	CCSPlayerPawn* pPawn = (CCSPlayerPawn*)pActivator;
 	CCSPlayerController* pController = pPawn->GetOriginalController();
 
@@ -1363,9 +1402,11 @@ void EW_OnEntityDeleted(CEntityInstance* pEntity)
 
 void EW_OnWeaponDeleted(CBaseEntity* pEntity)
 {
-	//TODO: check if this weapon is in the config
-	//		if it is, remove it's instance from the list
-	// we know it has a hammerid here
+	int id = g_pEWHandler->FindItemInstanceByWeapon(pEntity->entindex());
+	if (id != -1 && id < g_pEWHandler->vecItems.Count())
+	{
+		g_pEWHandler->RemoveWeaponFromItem(id);
+	}
 }
 
 bool EW_Detour_CCSPlayer_WeaponServices_CanUse(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon* pPlayerWeapon)
