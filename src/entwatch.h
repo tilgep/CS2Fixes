@@ -33,16 +33,15 @@ using ordered_json = nlohmann::ordered_json;
 
 #define EW_HUD_PREF_KEY_NAME "entwatch_hud"
 
-enum EWItemHandlerType
+enum EWHandlerType
 {
 	Type_None,
-	Button,
-	GameUi,
-	Counter,	// used for CounterDown/Up modes
+	Button,		// will auto hook +use
+	Counter,	// used for showing the value of a counter
 	Other,		// anything else
 };
 
-enum EWItemMode
+enum EWHandlerMode
 {
 	Mode_None = 1,
 	Cooldown,				/* Infinite uses, cooldown between each use */
@@ -56,6 +55,7 @@ enum EWItemMode
 enum EWDropReason
 {
 	Drop,
+	Infected,
 	Death,
 	Disconnect,
 	Deleted
@@ -79,12 +79,12 @@ struct EWItemInstance;
 struct EWItemHandler
 {
 	// Config variables
-	EWItemHandlerType type;
-	EWItemMode mode;
+	EWHandlerType type;
+	EWHandlerMode mode;
 	std::string szHammerid;
 	std::string szOutput;		/* Output name for when this is used e.g. OnPressed */
 	int iCooldown;
-	int iMaxuses;
+	int iMaxUses;
 	bool bShowUse;			/* Whether to show when this is used */
 	bool bShowHud;			/* Track this cd/uses on hud/scoreboard */
 	EWAutoConfigOption templated;		/* Is this entity templated (should we check for template suffix) */
@@ -92,23 +92,27 @@ struct EWItemHandler
 	// Instance variables
 	EWItemInstance* pItem;
 	int iEntIndex;
-	int iCurrentCooldown;
 	int iCurrentUses;
-	int iCounterValue;
-	int iCounterMax;
+	float flCounterValue;
+	float flCounterMax;
+	std::string szHudText;
+	float flLastUsed;
 
 	void SetDefaultValues();
 	void Print();
 public:
-	EWItemHandler(EWItemHandler* pOther);
+	EWItemHandler(std::shared_ptr<EWItemHandler> pOther);
 	EWItemHandler(ordered_json jsonKeys);
 
 	void RemoveHook();
 	void RegisterEntity(CBaseEntity* pEnt);
+	void Use(float flCounterValue);
+	void UpdateHudText();
 };
 
 struct EWItem
 {
+	int id;
 	std::string szItemName;			/* Name to show on pickup/drop/use */
 	std::string szShortName;		/* Name to show on hud/scoreboard */
 	std::string szHammerid;			/* Hammerid of the weapon */
@@ -117,14 +121,14 @@ struct EWItem
 	bool bShowHud;					/* Whether to show this item on hud/scoreboard */
 	EWAutoConfigOption transfer;					/* Can this item be transferred */
 	EWAutoConfigOption templated;				/* Is this item templated (should we check for template suffix) */
-	CUtlVector<EWItemHandler*> vecHandlers;		/* List of item abilities */
-	CUtlVector<std::string*> vecTriggers;		/* HammerIds of triggers associated with this item */
+	CUtlVector<std::shared_ptr<EWItemHandler>> vecHandlers;		/* List of item abilities */
+	std::vector<std::string> vecTriggers;		/* HammerIds of triggers associated with this item */
 
 	void SetDefaultValues();
 	void ParseColor(std::string value);
 public:
 	EWItem(std::shared_ptr<EWItem> pItem);
-	EWItem(ordered_json jsonKeys);
+	EWItem(ordered_json jsonKeys, int _id);
 };
 
 struct EWItemInstance : EWItem	/* Current instance of defined items */
@@ -136,6 +140,7 @@ struct EWItemInstance : EWItem	/* Current instance of defined items */
 	bool bAllowDrop; /* Whether this item should drop on death/disconnect only false for knife items */
 	char sClantag[64];
 	bool bHasThisClantag;
+	int iTeamNum;
 
 public:
 	EWItemInstance(int iWeapon, std::shared_ptr<EWItem> pItem) :
@@ -146,13 +151,16 @@ public:
 		bDropping(false),
 		bAllowDrop(true),
 		sClantag(""),
-		bHasThisClantag(false) {};
-	bool RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType, int iHandlerTemplateNum);
+		bHasThisClantag(false),
+		iTeamNum(CS_TEAM_NONE) {};
+	bool RegisterHandler(CBaseEntity* pEnt, int iHandlerTemplateNum);
 	bool RemoveHandler(CBaseEntity* pEnt);
 	int FindHandlerByEntIndex(int indexToFind);
+	void FindExistingHandlers();
 
 	void Pickup(int slot);
 	void Drop(EWDropReason reason, CCSPlayerController* pController);
+	std::string GetHandlerStateText();
 };
 
 class CEWHandler
@@ -175,9 +183,6 @@ public:
 
 	bool bConfigLoaded;
 
-	EWHudMode GetPlayerHudMode(CPlayerSlot slot);
-	void SetPlayerHudMode(CPlayerSlot slot, EWHudMode mode);
-
 	void UnLoadConfig();
 	void LoadMapConfig(const char* sMapName);
 	void LoadConfig(const char* sFilePath);
@@ -191,7 +196,7 @@ public:
 	int FindItemInstanceByWeapon(int iWeaponEnt);
 	int FindItemInstanceByOwner(int iOwnerSlot, bool bOnlyTransferrable, int iStartItem);
 	int FindItemInstanceByName(std::string sItemName, bool bOnlyTransferrable);
-	void RegisterHandler(CBaseEntity* pEnt, EWItemHandlerType entType);
+	void RegisterHandler(CBaseEntity* pEnt);
 	bool RegisterTrigger(CBaseEntity* pEnt);
 	void AddTouchHook(CBaseEntity* pEnt);
 	void Hook_Touch(CBaseEntity* pOther);
@@ -240,5 +245,7 @@ void EW_DropWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon*
 void EW_PlayerDeath(IGameEvent* pEvent);
 void EW_PlayerDisconnect(int slot);
 void EW_SendBeginNewMatchEvent();
+bool EW_IsFireOutputHooked();
+void EW_FireOutput(const CEntityIOOutput* pThis, CEntityInstance* pActivator, CEntityInstance* pCaller, const CVariant* value, float flDelay);
 int GetTemplateSuffixNumber(const char* szName);
-//float EW_UpdateHud();
+float EW_UpdateHud();

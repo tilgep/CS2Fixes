@@ -376,5 +376,14 @@
     <ClInclude Include="src\entwatch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\cs2_sdk\entity\cmathcounter.h">
+      <Filter>Header Files\cs2_sdk\entity</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cs2_sdk\entity\cpointworldtext.h">
+      <Filter>Header Files\cs2_sdk\entity</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cs2_sdk\entity\viewmodels.h">
+      <Filter>Header Files\cs2_sdk\entity</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

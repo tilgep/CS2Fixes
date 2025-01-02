@@ -104,6 +104,13 @@ ZEPlayer* ZEPlayerHandle::Get() const
 void ZEPlayer::OnSpawn()
 {
 	SetSpeedMod(1.f);
+
+	ZEPlayerHandle handle = GetHandle();
+	new CTimer(0.1f, false, false, [handle] {
+		if (handle.Get())
+			handle.Get()->CreateEntwatchHud();
+		return -1.0f;
+		});
 }
 
 void ZEPlayer::OnAuthenticated()
@@ -544,6 +551,13 @@ int ZEPlayer::GetButtonWatchMode()
 	return g_pUserPreferencesSystem->GetPreferenceInt(m_slot.Get(), BUTTON_WATCH_PREF_KEY_NAME, m_iButtonWatchMode);
 }
 
+int ZEPlayer::GetEntwatchHudMode()
+{
+	if (IsFakeClient())
+		return 0;
+	return g_pUserPreferencesSystem->GetPreferenceInt(m_slot.Get(), EW_HUD_PREF_KEY_NAME, m_iEntwatchHudMode);
+}
+
 void ZEPlayer::SetSteamIdAttribute()
 {
 	if (!g_bEnableMapSteamIds)
@@ -578,6 +592,108 @@ void ZEPlayer::ReplicateConVar(const char* pszName, const char* pszValue)
 	g_gameEventSystem->PostEventAbstract(-1, false, &filter, pNetMsg, data, 0);
 
 	delete data;
+}
+
+float flEwHudDistance = 13.0f;
+FAKE_FLOAT_CVAR(ewhuddist, "distance of ew hud", flEwHudDistance, 13.0f, false);
+
+CON_COMMAND_CHAT(ewhud, "remake the ew hud")
+{
+	if (!player)
+	{
+		ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "You cannot use this command from the server console.");
+		return;
+	}
+
+	ZEPlayer* zpPlayer = player->GetZEPlayer();
+	if (!zpPlayer)
+	{
+		ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Something went wrong");
+		return;
+	}
+	zpPlayer->CreateEntwatchHud();
+}
+
+void ZEPlayer::CreateEntwatchHud()
+{
+	CPointWorldText* pText = GetEntwatchHud();
+	if (pText)
+	{
+		pText->Remove();
+		pText = nullptr;
+	}
+
+	pText = CreateEntityByName<CPointWorldText>("point_worldtext");
+	pText->m_bEnabled(true);
+	pText->m_bFullbright(true);
+	pText->m_flFontSize(56.0f);
+	pText->m_Color->SetColor(m_colorEntwatchHud.r(), m_colorEntwatchHud.g(), m_colorEntwatchHud.b(), m_colorEntwatchHud.a());
+	pText->m_flWorldUnitsPerPx(0.01f);
+
+	V_strncpy(pText->m_FontName, "Consolas", 64);
+	
+	pText->SetMessage("");
+
+	CCSPlayerPawn* pPawn = (CCSPlayerPawn*)CCSPlayerController::FromSlot(GetPlayerSlot())->GetPawn();
+	if (!pPawn)
+		return;
+	Vector origin = pPawn->GetAbsOrigin();
+	QAngle angles = pPawn->GetAbsRotation(); // Using eyeangles can make parenting have inconsitent offsets
+	
+	// Only get direction vectors of yaw (parenting to viewmodel only needs this)
+	angles.x = 0.0;
+	angles.z = 0.0;
+	Vector forward;
+	Vector right;
+	Vector up; //unused
+	AngleVectors(angles, &forward, &right, &up);
+
+	// Distance in front
+	origin.x += forward.x * flEwHudDistance;
+	origin.y += forward.y * flEwHudDistance;
+
+	// Left / Right offset (+x to move right, -x to move left)
+	origin.x += right.x * m_flEntwatchHudX;
+	origin.y += right.y * m_flEntwatchHudX;
+
+	// Up / Down offset (+y to move down, -y to move up)
+	origin.z -= m_flEntwatchHudY;
+	
+	// Rotate text (keeping yaw)
+	angles.z = 90.0f;
+	angles.y = angles.y - 90.0f;
+	angles.x = 0.0f;
+
+	pText->Teleport(&origin, &angles, nullptr);
+	pText->DispatchSpawn();
+	
+	// Find viewmodel
+	CCSGOViewModel* pViewmodel = nullptr;
+	while ((pViewmodel = reinterpret_cast<CCSGOViewModel*>(UTIL_FindEntityByClassname(pViewmodel, "csgo_viewmodel"))) != nullptr)
+	{
+		if (pViewmodel->m_hOwnerEntity->entindex() == pPawn->entindex())
+		{
+			pText->SetParent(pViewmodel);
+			break;
+		}
+	}
+	
+	SetEntwatchHud(pText);
+}
+
+void ZEPlayer::SetEntwatchHudColor(Color colorHud)
+{
+	m_colorEntwatchHud = colorHud;
+	
+	CreateEntwatchHud();
+}
+
+void ZEPlayer::SetEntwatchHudPos(float x, float y)
+{
+	m_flEntwatchHudX = x; 
+	m_flEntwatchHudY = y;
+	
+	CreateEntwatchHud();
 }
 
 void CPlayerManager::OnBotConnected(CPlayerSlot slot)

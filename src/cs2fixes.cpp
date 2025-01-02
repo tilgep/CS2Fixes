@@ -1060,16 +1060,6 @@ void CS2Fixes::Hook_DropWeaponPost(CBasePlayerWeapon* pWeapon, Vector* pVecTarge
 	RETURN_META(MRES_IGNORED);
 }
 
-void CS2Fixes::Hook_DropWeaponPost(CBasePlayerWeapon* pWeapon, Vector* pVecTarget, Vector* pVelocity)
-{
-	if (g_bEnableEntWatch)
-	{
-		CCSPlayer_WeaponServices* pWeaponService = META_IFACEPTR(CCSPlayer_WeaponServices);
-		EW_DropWeapon(pWeaponService, pWeapon);
-	}
-	RETURN_META(MRES_IGNORED);
-}
-
 int CS2Fixes::Hook_LoadEventsFromFile(const char* filename, bool bSearchAll)
 {
 	ExecuteOnce(g_gameEventManager = META_IFACEPTR(IGameEventManager2));

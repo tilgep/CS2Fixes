@@ -53,10 +53,10 @@ void CEntityListener::OnEntitySpawned(CEntityInstance* pEntity)
 	if (g_bGrenadeNoBlock && V_stristr(pEntity->GetClassname(), "_projectile"))
 		reinterpret_cast<CBaseEntity*>(pEntity)->SetCollisionGroup(COLLISION_GROUP_DEBRIS);
 
+	EntityHandler_OnEntitySpawned(reinterpret_cast<CBaseEntity*>(pEntity));
+
 	if (g_bEnableEntWatch)
 		EW_OnEntitySpawned(pEntity);
-
-	EntityHandler_OnEntitySpawned(reinterpret_cast<CBaseEntity*>(pEntity));
 }
 
 void CEntityListener::OnEntityCreated(CEntityInstance* pEntity)

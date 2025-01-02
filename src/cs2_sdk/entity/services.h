@@ -20,6 +20,7 @@
 #pragma once
 #include "globaltypes.h"
 #include <entity/ccsplayerpawn.h>
+#include "viewmodels.h"
 #include <entity/ccsweaponbase.h>
 #include <platform.h>
 
@@ -260,3 +261,16 @@ public:
 
 class CCSPlayer_CameraServices : public CCSPlayerBase_CameraServices
 {};
+
+class CPlayer_ViewModelServices : public CPlayerPawnComponent
+{
+public:
+	DECLARE_SCHEMA_CLASS(CPlayer_ViewModelServices)
+};
+
+class CCSPlayer_ViewModelServices : public CPlayer_ViewModelServices
+{
+public:
+	DECLARE_SCHEMA_CLASS(CCSPlayer_ViewModelServices)
+	SCHEMA_FIELD_POINTER(CHandle<CBaseViewModel>, m_hViewModel) // m_hViewModel[3]
+};

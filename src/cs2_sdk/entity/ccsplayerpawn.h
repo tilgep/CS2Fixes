@@ -42,6 +42,7 @@ public:
 	SCHEMA_FIELD(QAngle, m_angEyeAngles)
 	SCHEMA_FIELD(CSPlayerState, m_iPlayerState)
 	SCHEMA_FIELD(CHandle<CCSPlayerController>, m_hOriginalController)
+	SCHEMA_FIELD_POINTER(CPlayer_ViewModelServices, m_pViewModelServices)
 
 	CCSPlayerController* GetOriginalController()
 	{
@@ -65,5 +66,10 @@ public:
 	[[nodiscard]] CCSPlayer_CameraServices* GetCameraService()
 	{
 		return reinterpret_cast<CCSPlayer_CameraServices*>(m_pCameraServices());
+	}
+
+	CCSPlayer_ViewModelServices* GetViewModelService()
+	{
+		return reinterpret_cast<CCSPlayer_ViewModelServices*>(m_pViewModelServices());
 	}
 };

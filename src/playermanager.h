@@ -21,6 +21,7 @@
 #include "bitvec.h"
 #include "common.h"
 #include "entity/cparticlesystem.h"
+#include "entity/cpointworldtext.h"
 #include "entity/lights.h"
 #include "gamesystem.h"
 #include "steam/isteamuser.h"
@@ -184,6 +185,10 @@ public:
 		m_pActiveZRClass = nullptr;
 		m_pActiveZRModel = nullptr;
 		m_iButtonWatchMode = 0;
+		m_iEntwatchHudMode = 0;
+		m_colorEntwatchHud = Color(255, 255, 255, 254); // 254 alpha allows it to be visible through some items
+		m_flEntwatchHudX = 0.0;
+		m_flEntwatchHudY = 0.0;
 	}
 
 	~ZEPlayer()
@@ -192,6 +197,10 @@ public:
 
 		if (pFlashLight)
 			pFlashLight->Remove();
+
+		CPointWorldText* pEntwatchHud = m_hEntwatchHud.Get();
+		if (pEntwatchHud)
+			pEntwatchHud->Remove();
 	}
 
 	bool IsFakeClient() { return m_bFakeClient; }
@@ -246,6 +255,10 @@ public:
 	void ReplicateConVar(const char* pszName, const char* pszValue);
 	void SetActiveZRClass(std::shared_ptr<ZRClass> pZRModel) { m_pActiveZRClass = pZRModel; }
 	void SetActiveZRModel(std::shared_ptr<ZRModelEntry> pZRClass) { m_pActiveZRModel = pZRClass; }
+	void SetEntwatchHudMode(int iMode) { m_iEntwatchHudMode = iMode; }
+	void SetEntwatchHud(CPointWorldText* pWorldText) { m_hEntwatchHud.Set(pWorldText); }
+	void SetEntwatchHudColor(Color colorHud);
+	void SetEntwatchHudPos(float x, float y);
 
 	uint64 GetAdminFlags() { return m_iAdminFlags; }
 	int GetAdminImmunity() { return m_iAdminImmunity; }
@@ -286,7 +299,12 @@ public:
 	std::shared_ptr<ZRClass> GetActiveZRClass() { return m_pActiveZRClass; }
 	std::shared_ptr<ZRModelEntry> GetActiveZRModel() { return m_pActiveZRModel; }
 	int GetButtonWatchMode();
-
+	int GetEntwatchHudMode();
+	CPointWorldText* GetEntwatchHud() { return m_hEntwatchHud.Get(); }
+	Color GetEntwatchHudColor() { return m_colorEntwatchHud; }
+	float GetEntwatchHudX() { return m_flEntwatchHudX; }
+	float GetEntwatchHudY() { return m_flEntwatchHudY; }
+	
 	void OnSpawn();
 	void OnAuthenticated();
 	void CheckAdmin();
@@ -300,6 +318,7 @@ public:
 	void StartGlow(Color color, int duration);
 	void EndGlow();
 	void SetSteamIdAttribute();
+	void CreateEntwatchHud();
 
 private:
 	bool m_bAuthenticated;
@@ -348,6 +367,11 @@ private:
 	std::shared_ptr<ZRClass> m_pActiveZRClass;
 	std::shared_ptr<ZRModelEntry> m_pActiveZRModel;
 	int m_iButtonWatchMode;
+	CHandle<CPointWorldText> m_hEntwatchHud;
+	int m_iEntwatchHudMode;
+	Color m_colorEntwatchHud;
+	float m_flEntwatchHudX;
+	float m_flEntwatchHudY;
 };
 
 class CPlayerManager
