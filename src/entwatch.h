@@ -33,23 +33,25 @@ using ordered_json = nlohmann::ordered_json;
 
 #define EW_HUD_PREF_KEY_NAME "entwatch_hud"
 
+#define EW_HUD_TICKRATE 0.5f
+
 enum EWHandlerType
 {
 	Type_None,
-	Button,		// will auto hook +use
-	Counter,	// used for showing the value of a counter
-	Other,		// anything else
+	Button,			// will auto hook +use
+	CounterDown,	// used for showing the value of a counter that stops when minimum reached
+	CounterUp,		// used for showing the value of a counter that stops when maximum reached
+	Other,			// anything else
 };
 
 enum EWHandlerMode
 {
 	Mode_None = 1,
-	Cooldown,				/* Infinite uses, cooldown between each use */
-	MaxUses,				/* Limited uses with no cooldown between uses */
-	MaxUsesWithCooldown,	/* Limited uses with a cooldown between each use */
+	Cooldown,				/* Infinite uses, cooldown between each use, or R if ready to use */
+	MaxUses,				/* Limited uses with no cooldown between uses, or E if empty */
+	MaxUsesWithCooldown,	/* Limited uses with a cooldown between each use, or E if empty */
 	CooldownAfterUses,		/* Cooldown after all uses, allowing for more uses */
-	CounterDown,			/* math_counter - stops when minimum reached */
-	CounterUp,				/* math_counter - stops when maximum reached */
+	CounterValue,			/* show math_counter value, or E if empty */
 };
 
 enum EWDropReason

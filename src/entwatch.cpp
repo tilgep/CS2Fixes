@@ -28,11 +28,9 @@
 #include "eventlistener.h"
 #include "detours.h"
 #include "zombiereborn.h"
-#include "entity/cbaseentity.h"
 #include "entity/cgamerules.h"
 #include "entity/services.h"
 #include "entity/cteam.h"
-#include "entity/cparticlesystem.h"
 #include "engine/igameeventsystem.h"
 #include "entity/cbasebutton.h"
 #include "entity/cmathcounter.h"
@@ -138,10 +136,13 @@ EWItemHandler::EWItemHandler(ordered_json jsonKeys)
 	if (jsonKeys.contains("type"))
 	{
 		std::string value = jsonKeys["type"].get<std::string>();
+		
 		if (value == "button")
 			type = EWHandlerType::Button;
-		else if(value == "counter")
-			type = EWHandlerType::Counter;
+		else if(value == "counterdown")
+			type = EWHandlerType::CounterDown;
+		else if (value == "counterup")
+			type = EWHandlerType::CounterUp;
 	}
 
 	if (jsonKeys.contains("hammerid"))
@@ -189,21 +190,23 @@ void EWItemHandler::RegisterEntity(CBaseEntity* pEntity)
 	case Button:
 		g_pEWHandler->AddUseHook(pEntity);
 		break;
-	case Counter:
+	case CounterDown:
+	case CounterUp:
 		szOutput = "OutValue";
 
 		CMathCounter* pCounter = (CMathCounter*)pEntity;
 		if (!pCounter)
 			return;
+
 		flCounterMax = pCounter->m_flMax - pCounter->m_flMin;
-		//float val = (float)(pCounter->m_OutValue + 24);
-		if (mode == CounterDown)
+
+		if (type == CounterDown)
 		{
-			//flCounterValue = flCounterVal - pCounter->m_flMin;
+			flCounterValue = pCounter->GetCounterValue() - pCounter->m_flMin;
 		}
-		else if (mode == CounterUp)
+		else if (type == CounterUp)
 		{
-			//flCounterValue = pCounter->m_flMax - flCounterVal;
+			flCounterValue = pCounter->m_flMax - pCounter->GetCounterValue();
 		}
 		break;
 	}
@@ -225,10 +228,16 @@ void EWItemHandler::Use(float flCounterVal)
 	case Cooldown:
 		break;
 	case MaxUses:
-		if (iCurrentUses < iMaxUses)
+		if (type == EWHandlerType::CounterDown || type == EWHandlerType::CounterUp)
 		{
-			iCurrentUses++;
+
 		}
+		else
+		{
+			if (iCurrentUses < iMaxUses)
+				iCurrentUses++;
+		}
+		
 		break;
 	case MaxUsesWithCooldown:
 		if (iCurrentUses < iMaxUses)
@@ -244,23 +253,22 @@ void EWItemHandler::Use(float flCounterVal)
 			iCurrentUses = 0;
 		}
 		break;
-	case CounterDown:
-	case CounterUp:
+	case CounterValue:
 		CMathCounter* pEnt = (CMathCounter*)g_pEntitySystem->GetEntityInstance((CEntityIndex)iEntIndex);
 		if (!pEnt)
 			return;
-		if (mode == CounterDown)
+		if (type == CounterDown)
 		{
 			flCounterValue = flCounterVal - pEnt->m_flMin;
 			flCounterMax = pEnt->m_flMax - pEnt->m_flMin;
 		}
-		else if (mode == CounterUp)
+		else if (type == CounterUp)
 		{
 			flCounterValue = pEnt->m_flMax - flCounterVal;
 			flCounterMax = pEnt->m_flMax - pEnt->m_flMin;
 		}
 
-		Message("Value: %.2f/%.2f\n", flCounterValue, flCounterMax);
+		//Message("Value: %.2f/%.2f\n", flCounterValue, flCounterMax);
 		return;
 	}
 
@@ -318,8 +326,7 @@ void EWItemHandler::UpdateHudText()
 	case CooldownAfterUses:
 		szHudText = std::to_string(iCurrentUses) + "/" + std::to_string(iMaxUses);
 		break;
-	case CounterDown:
-	case CounterUp:
+	case CounterValue:
 		if (flCounterValue <= 0.0)
 			szHudText = "E";
 		else
@@ -1242,10 +1249,7 @@ void CEWHandler::PlayerPickup(CCSPlayerPawn* pPawn, CBasePlayerWeapon* pPlayerWe
 	FOR_EACH_VEC(vecItems, i)
 	{
 		if (vecItems[i]->iWeaponEnt == -1)
-		{
-			Message("Invalid weapon ent in item instance %d!\n", i);
 			continue;
-		}
 
 		if (pPlayerWeapon->entindex() != vecItems[i]->iWeaponEnt)
 			continue;
@@ -1255,7 +1259,7 @@ void CEWHandler::PlayerPickup(CCSPlayerPawn* pPawn, CBasePlayerWeapon* pPlayerWe
 		if (!m_bHudTicking)
 		{
 			m_bHudTicking = true;
-			new CTimer(0.5f, false, false, []
+			new CTimer(EW_HUD_TICKRATE, false, false, []
 				{
 					return EW_UpdateHud();
 				});
@@ -1361,7 +1365,6 @@ void CEWHandler::Hook_Use(InputData_t* pInput)
 		}
 	}
 
-	//Message("Used:%d   Found[item:%d  handler:%d]\n", index, itemIndex, handlerIndex);
 	if (itemIndex == -1 || handlerIndex == -1)
 		RETURN_META(MRES_IGNORED);
 
@@ -1379,7 +1382,6 @@ void CEWHandler::Hook_Use(InputData_t* pInput)
 	CCSPlayerPawn* pPawn = (CCSPlayerPawn*)pActivator;
 	CCSPlayerController* pController = pPawn->GetOriginalController();
 
-	//Message("presser:%d   owner:%d\n", pController->GetPlayerSlot(), pItem->iOwnerSlot);
 	if (!pController || pController->GetPlayerSlot() != pItem->iOwnerSlot)
 		RETURN_META(resVal);
 
@@ -1399,15 +1401,10 @@ void CEWHandler::Hook_Use(InputData_t* pInput)
 	// WE SHOW USE MESSAGE IN FireOutput
 	// This is just to prevent unnecessary shit with buttons like movement
 	//
-	// TODO: move this to FireOutput
-	//if (vecItems[itemIndex]->vecHandlers[handlerIndex]->bShowUse)
-		//ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "\x04%s \x05used %s%s", pController->GetPlayerName(), vecItems[itemIndex]->sChatColor, vecItems[itemIndex]->szItemName);
 
-	Message("[EntWatch] %s used %s (weaponid: %d)\n", pController->GetPlayerName(), pItem->szItemName.c_str(), pItem->iWeaponEnt);
 	RETURN_META(MRES_IGNORED);
 }
 
-#define EW_HUD_TICKRATE 0.5f;
 // Update cd and uses of all held items
 float EW_UpdateHud()
 {
@@ -1518,7 +1515,7 @@ void EW_OnEntitySpawned(CEntityInstance* pEntity)
 			g_pEWHandler->RegisterItem(i, (CBasePlayerWeapon*)pEntity);
 
 			int itemindex = g_pEWHandler->vecItems.Count() - 1;
-			new CTimer(0.6, false, false, [itemindex] {
+			new CTimer(0.6, false, false, [itemindex] { 
 				if (itemindex > -1 && itemindex < g_pEWHandler->vecItems.Count())
 					g_pEWHandler->vecItems[itemindex]->FindExistingHandlers();
 				return -1.0f;
@@ -1747,13 +1744,12 @@ void EW_FireOutput(const CEntityIOOutput* pThis, CEntityInstance* pActivator, CE
 			if (V_stricmp(pThis->m_pDesc->m_pName, handler->szOutput.c_str()))
 				continue;
 
-			Message("Output for item %s (instance:%d)  handler:%d outputname:%s\n", g_pEWHandler->vecItems[i]->szItemName, i, j, pThis->m_pDesc->m_pName);
-			if (handler->type == EWHandlerType::Counter)
+			//Message("Output for item %s (instance:%d)  handler:%d outputname:%s\n", g_pEWHandler->vecItems[i]->szItemName, i, j, pThis->m_pDesc->m_pName);
+			if (handler->type == EWHandlerType::CounterDown || handler->type == EWHandlerType::CounterUp)
 				handler->Use(value->m_float);
 			else
 				handler->Use(0.0);
 		}
-		
 	}
 }
 
