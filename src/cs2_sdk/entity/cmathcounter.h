@@ -21,7 +21,6 @@
 
 #include "../schema.h"
 #include "cbaseentity.h"
-#include "entityoutput.h"
 
 class CMathCounter : public CBaseEntity
 {
@@ -34,5 +33,11 @@ public:
 	SCHEMA_FIELD(bool, m_bHitMax)
 	SCHEMA_FIELD(bool, m_bDisabled)
 
-	SCHEMA_FIELD_POINTER(COutputFloat, m_OutValue)
+	SCHEMA_FIELD_POINTER(char, m_OutValue) // TODO: CEntityOutputTemplate< float32 > m_OutValue
+
+	float GetCounterValue()
+	{
+		float flCounterValue = *(float*)(m_OutValue() + 24);
+		return flCounterValue;
+	}
 };
