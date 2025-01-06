@@ -48,8 +48,7 @@ enum EWHandlerMode
 {
 	Mode_None = 1,
 	Cooldown,				/* Infinite uses, cooldown between each use, or R if ready to use */
-	MaxUses,				/* Limited uses with no cooldown between uses, or E if empty */
-	MaxUsesWithCooldown,	/* Limited uses with a cooldown between each use, or E if empty */
+	MaxUses,				/* Limited uses, can have a cooldown between each use, or E if empty */
 	CooldownAfterUses,		/* Cooldown after all uses, allowing for more uses */
 	CounterValue,			/* show math_counter value, or E if empty */
 };
@@ -98,7 +97,8 @@ struct EWItemHandler
 	float flCounterValue;
 	float flCounterMax;
 	std::string szHudText;
-	float flLastUsed;
+	float flLastUsed;		// For tracking cd on the hud
+	float flLastShownUse;   // To prevent too much chat spam
 
 	void SetDefaultValues();
 	void Print();
@@ -109,6 +109,7 @@ public:
 	void RemoveHook();
 	void RegisterEntity(CBaseEntity* pEnt);
 	void Use(float flCounterValue);
+	void UseCounter(float flCounterValue);
 	void UpdateHudText();
 };
 

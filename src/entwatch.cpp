@@ -127,6 +127,7 @@ EWItemHandler::EWItemHandler(std::shared_ptr<EWItemHandler> pOther)
 	flCounterValue = 0;
 	flCounterMax = 0;
 	flLastUsed = -1.0;
+	flLastShownUse = -1.0;
 }
 
 EWItemHandler::EWItemHandler(ordered_json jsonKeys)
@@ -198,15 +199,29 @@ void EWItemHandler::RegisterEntity(CBaseEntity* pEntity)
 		if (!pCounter)
 			return;
 
-		flCounterMax = pCounter->m_flMax - pCounter->m_flMin;
+		float max = pCounter->m_flMax - pCounter->m_flMin;
+		
+		if (mode == CounterValue)
+		{
+			flCounterMax = max;
 
-		if (type == CounterDown)
-		{
-			flCounterValue = pCounter->GetCounterValue() - pCounter->m_flMin;
+			float val = 0.0;
+			if (type == CounterDown)
+				val = pCounter->GetCounterValue() - pCounter->m_flMin;
+			else if (type == CounterUp)
+				val = pCounter->m_flMax - pCounter->GetCounterValue();
+			flCounterValue = val;
 		}
-		else if (type == CounterUp)
+		else
 		{
-			flCounterValue = pCounter->m_flMax - pCounter->GetCounterValue();
+			float val = 0.0;
+			if (type == CounterDown)
+				val = pCounter->m_flMax - pCounter->GetCounterValue();
+			else if (type == CounterUp)
+				val = pCounter->GetCounterValue() - pCounter->m_flMin;
+
+			iCurrentUses = static_cast<int>(std::round(val));
+			iMaxUses = static_cast<int>(std::round(max));
 		}
 		break;
 	}
@@ -220,28 +235,24 @@ void EWItemHandler::Use(float flCounterVal)
 	// No tracking is necessary if its not being shown anywhere
 	if (!bShowHud && !bShowUse)
 		return;
-	
+
+	if (type == EWHandlerType::CounterDown || type == EWHandlerType::CounterUp || mode == EWHandlerMode::CounterValue)
+	{
+		UseCounter(flCounterVal);
+		return;
+	}
+
 	switch (mode)
 	{
 	case Mode_None:
 		break;
 	case Cooldown:
+		flLastUsed = gpGlobals->curtime;
 		break;
 	case MaxUses:
-		if (type == EWHandlerType::CounterDown || type == EWHandlerType::CounterUp)
-		{
-
-		}
-		else
-		{
-			if (iCurrentUses < iMaxUses)
-				iCurrentUses++;
-		}
-		
-		break;
-	case MaxUsesWithCooldown:
 		if (iCurrentUses < iMaxUses)
 		{
+			flLastUsed = gpGlobals->curtime;
 			iCurrentUses++;
 		}
 		break;
@@ -249,36 +260,17 @@ void EWItemHandler::Use(float flCounterVal)
 		iCurrentUses++;
 		if (iCurrentUses >= iMaxUses)
 		{
-			//iCurrentCooldown = iCooldown;
+			flLastUsed = gpGlobals->curtime;
 			iCurrentUses = 0;
 		}
 		break;
 	case CounterValue:
-		CMathCounter* pEnt = (CMathCounter*)g_pEntitySystem->GetEntityInstance((CEntityIndex)iEntIndex);
-		if (!pEnt)
-			return;
-		if (type == CounterDown)
-		{
-			flCounterValue = flCounterVal - pEnt->m_flMin;
-			flCounterMax = pEnt->m_flMax - pEnt->m_flMin;
-		}
-		else if (type == CounterUp)
-		{
-			flCounterValue = pEnt->m_flMax - flCounterVal;
-			flCounterMax = pEnt->m_flMax - pEnt->m_flMin;
-		}
-
-		//Message("Value: %.2f/%.2f\n", flCounterValue, flCounterMax);
+		// Handled in CounterUse()
 		return;
 	}
 
-	
-	float flTimeSinceLast = gpGlobals->curtime - flLastUsed;
-	
-	flLastUsed = gpGlobals->curtime;
-
 	// Don't allow too much chat spam
-	if (flTimeSinceLast < 1.3)
+	if ((gpGlobals->curtime - flLastShownUse) < 0.1)
 		return;
 
 	CCSPlayerController* pController = CCSPlayerController::FromSlot(pItem->iOwnerSlot);
@@ -286,20 +278,92 @@ void EWItemHandler::Use(float flCounterVal)
 		return;
 
 	if(bShowUse)
+	{
 		ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "\x03%s \x05used %s%s", pController->GetPlayerName(), pItem->sChatColor, pItem->szItemName);
+		flLastShownUse = gpGlobals->curtime;
+	}
+}
+
+void EWItemHandler::UseCounter(float flCounterVal)
+{
+	Message("USECOUNTER: CounterVal:%.2f\n", flCounterVal);
+	CMathCounter* pCounter = (CMathCounter*)g_pEntitySystem->GetEntityInstance((CEntityIndex)iEntIndex);
+	if (!pCounter)
+		return;
+	int newCurrentUses = 0;
+	switch (mode)
+	{
+		case Mode_None:
+			break;
+		case Cooldown:
+			flLastUsed = gpGlobals->curtime;
+			break;
+		case MaxUses:
+			iMaxUses = pCounter->m_flMax - pCounter->m_flMin;
+
+			if (type == EWHandlerType::CounterDown)
+				newCurrentUses = pCounter->m_flMax - flCounterVal;
+			else if (type == EWHandlerType::CounterUp)
+				newCurrentUses = flCounterVal - pCounter->m_flMin;
+
+			if (newCurrentUses <= iCurrentUses) // Our allowed uses increased or didnt change(?), dont show in chat
+			{
+				iCurrentUses = newCurrentUses;
+				return;
+			}
+			iCurrentUses = newCurrentUses;
+
+			flLastUsed = gpGlobals->curtime;
+			break;
+		case CooldownAfterUses:
+			iMaxUses = pCounter->m_flMax - pCounter->m_flMin;
+			
+			if (type == EWHandlerType::CounterDown)
+				newCurrentUses = pCounter->m_flMax - flCounterVal;
+			else if (type == EWHandlerType::CounterUp)
+				newCurrentUses = flCounterVal - pCounter->m_flMin;
+
+			if (newCurrentUses <= iCurrentUses) // Our allowed uses increased or didnt change(?), dont show in chat
+			{
+				iCurrentUses = newCurrentUses;
+				return;
+			}
+			iCurrentUses = newCurrentUses;
+
+			if (iCurrentUses >= iMaxUses)
+				flLastUsed = gpGlobals->curtime;
+			break;
+		case CounterValue:
+			flCounterMax = pCounter->m_flMax - pCounter->m_flMin;
+
+			if (type == EWHandlerType::CounterDown)
+				flCounterValue = flCounterVal - pCounter->m_flMin;
+			else if (type == EWHandlerType::CounterUp)
+				flCounterValue = pCounter->m_flMax - flCounterVal;
+			return;
+	}
+
+	if ((gpGlobals->curtime - flLastShownUse) < 0.1)
+		return;
+
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(pItem->iOwnerSlot);
+	if (!pController)
+		return;
+
+	if (bShowUse)
+	{
+		ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "\x03%s \x05used %s%s", pController->GetPlayerName(), pItem->sChatColor, pItem->szItemName);
+		flLastShownUse = gpGlobals->curtime;
+	}
 }
 
 void EWItemHandler::UpdateHudText()
 {
 	int timeleft;
 	if (flLastUsed == -1.0)
-	{
 		timeleft = 0;
-	}
 	else
-	{
 		timeleft = iCooldown - (gpGlobals->curtime - flLastUsed);
-	}
 
 	switch (mode)
 	{
@@ -308,23 +372,23 @@ void EWItemHandler::UpdateHudText()
 		return;
 	case Cooldown:
 		if (timeleft <= 0)
-		{
 			szHudText = "R";
-		}
 		else
-		{
 			szHudText = std::to_string(timeleft);
-		}
 		return;
 	case MaxUses:
-		if (iCurrentUses >= iMaxUses)
+		if (timeleft > 0)
+			szHudText = std::to_string(timeleft);
+		else if (iCurrentUses >= iMaxUses)
 			szHudText = "E";
 		else
 			szHudText = std::to_string(iCurrentUses) + "/" + std::to_string(iMaxUses);
 		break;
-	case MaxUsesWithCooldown:
 	case CooldownAfterUses:
-		szHudText = std::to_string(iCurrentUses) + "/" + std::to_string(iMaxUses);
+		if (timeleft > 0)
+			szHudText = std::to_string(timeleft);
+		else
+			szHudText = std::to_string(iCurrentUses) + "/" + std::to_string(iMaxUses);
 		break;
 	case CounterValue:
 		if (flCounterValue <= 0.0)
@@ -557,7 +621,7 @@ void EWItemInstance::FindExistingHandlers()
 			{
 				handler->RegisterEntity(pTarget);
 				handler->pItem = this;
-				Message("LATE REGISTERED HANDLER. Item:%s  Handler:%d  entindex:%d\n", szItemName, i, pTarget->entindex());
+				Message("LATE REGISTERED HANDLER. Item:%s  Handler:%d  entindex:%d\n", szItemName.c_str(), i, pTarget->entindex());
 				break;
 			}
 		}
@@ -675,6 +739,7 @@ void EWItemInstance::Drop(EWDropReason reason, CCSPlayerController* pController)
 	switch (reason)
 	{
 	case EWDropReason::Drop:
+			
 		Message(EW_PREFIX "%s has dropped %s (weaponid:%d)\n", sPlayerInfo, szItemName.c_str(), iWeaponEnt);
 		if (bShowPickup)
 			ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "\x03%s \x05has dropped %s%s", pController->GetPlayerName(), sChatColor, szItemName.c_str());
@@ -1002,7 +1067,7 @@ void CEWHandler::RegisterHandler(CBaseEntity* pEnt)
 	{
 		if (vecItems[i]->RegisterHandler(pEnt, templatenum))
 		{
-			Message("REGISTERED HANDLER. Item:%s Instance:%d  entindex:%d\n", vecItems[i]->szItemName, i + 1, pEnt->entindex());
+			Message("REGISTERED HANDLER. Item:%s Instance:%d  entindex:%d\n", vecItems[i]->szItemName.c_str(), i + 1, pEnt->entindex());
 			return;
 		}
 	}
