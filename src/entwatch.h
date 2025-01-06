@@ -139,7 +139,6 @@ struct EWItemInstance : EWItem	/* Current instance of defined items */
 	int iOwnerSlot; /* Slot of the current holder */
 	int iWeaponEnt;
 	int iTemplateNum;
-	bool bDropping;
 	bool bAllowDrop; /* Whether this item should drop on death/disconnect only false for knife items */
 	char sClantag[64];
 	bool bHasThisClantag;
@@ -151,7 +150,6 @@ public:
 		iOwnerSlot(-1),
 		iWeaponEnt(iWeapon),
 		iTemplateNum(-1),
-		bDropping(false),
 		bAllowDrop(true),
 		sClantag(""),
 		bHasThisClantag(false),
@@ -185,6 +183,7 @@ public:
 	}
 
 	bool bConfigLoaded;
+	bool IsConfigLoaded() { return bConfigLoaded; }
 
 	void UnLoadConfig();
 	void LoadMapConfig(const char* sMapName);

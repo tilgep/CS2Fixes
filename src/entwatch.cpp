@@ -245,7 +245,8 @@ void EWItemHandler::Use(float flCounterVal)
 	switch (mode)
 	{
 	case Mode_None:
-		break;
+		// Don't show uses in chat for this
+		return;
 	case Cooldown:
 		flLastUsed = gpGlobals->curtime;
 		break;
@@ -294,7 +295,8 @@ void EWItemHandler::UseCounter(float flCounterVal)
 	switch (mode)
 	{
 		case Mode_None:
-			break;
+			// Don't show uses in chat for this
+			return;
 		case Cooldown:
 			flLastUsed = gpGlobals->curtime;
 			break;
@@ -691,7 +693,6 @@ void EWItemInstance::Drop(EWDropReason reason, CCSPlayerController* pController)
 	if (!pPlayer)
 	{
 		iOwnerSlot = -1;
-		bDropping = false;
 		return;
 	}
 
@@ -792,7 +793,6 @@ void EWItemInstance::Drop(EWDropReason reason, CCSPlayerController* pController)
 	}
 
 	iOwnerSlot = -1;
-	bDropping = false;
 }
 
 std::string EWItemInstance::GetHandlerStateText()
@@ -1719,7 +1719,6 @@ void EW_DropWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon*
 	if (!pController->IsConnected())
 		return;
 
-	g_pEWHandler->vecItems[i]->bDropping = true;
 	CHandle<CCSPlayerController> hController = pPawn->m_hOriginalController;
 
 	g_pEWHandler->PlayerDrop(EWDropReason::Drop, i, hController.Get());

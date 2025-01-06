@@ -881,6 +881,15 @@ void CS2Fixes::Hook_CheckTransmit(CCheckTransmitInfo** ppInfoList, int infoCount
 
 			if (!g_bFlashLightTransmitOthers && pFlashLight)
 				pInfo->m_pTransmitEntity->Clear(pFlashLight->entindex());
+
+			if (g_bEnableEntWatch && g_pEWHandler->IsConfigLoaded())
+			{
+				// Don't transmit other players' entwatch hud
+				CPointWorldText* pHud = pController->IsConnected() ? g_playerManager->GetPlayer(j)->GetEntwatchHud() : nullptr;
+				if (pHud)
+					pInfo->m_pTransmitEntity->Clear(pHud->entindex());
+			}
+
 			// Always transmit other players if spectating
 			if (!g_bEnableHide || pSelfController->GetPawnState() == STATE_OBSERVER_MODE)
 				continue;
