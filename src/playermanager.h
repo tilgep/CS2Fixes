@@ -186,7 +186,7 @@ public:
 		m_pActiveZRModel = nullptr;
 		m_iButtonWatchMode = 0;
 		m_iEntwatchHudMode = 0;
-		m_colorEntwatchHud = Color(255, 255, 255, 254); // 254 alpha allows it to be visible through some items
+		m_colorEntwatchHud = Color(255, 255, 255, 255);
 		m_flEntwatchHudX = 0.0;
 		m_flEntwatchHudY = 0.0;
 	}
@@ -255,7 +255,7 @@ public:
 	void ReplicateConVar(const char* pszName, const char* pszValue);
 	void SetActiveZRClass(std::shared_ptr<ZRClass> pZRModel) { m_pActiveZRClass = pZRModel; }
 	void SetActiveZRModel(std::shared_ptr<ZRModelEntry> pZRClass) { m_pActiveZRModel = pZRClass; }
-	void SetEntwatchHudMode(int iMode) { m_iEntwatchHudMode = iMode; }
+	void SetEntwatchHudMode(int iMode);
 	void SetEntwatchHud(CPointWorldText* pWorldText) { m_hEntwatchHud.Set(pWorldText); }
 	void SetEntwatchHudColor(Color colorHud);
 	void SetEntwatchHudPos(float x, float y);

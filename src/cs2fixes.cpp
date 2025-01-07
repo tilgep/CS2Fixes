@@ -957,7 +957,15 @@ bool CS2Fixes::Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer* pInfoContainer)
 	// This is a shit place to be doing this, but player_death event is too late and there is no pre-hook alternative
 	// Check if this is going to kill the player
 	if (g_bDropMapWeapons && pPawn && pPawn->m_iHealth() <= 0)
+	{
+		if (g_bEnableEntWatch)
+		{
+			CCSPlayerController* pController = pPawn->GetOriginalController();
+			if (pController)
+				EW_PlayerDeathPre(pController);
+		}
 		pPawn->DropMapWeapons();
+	}
 
 	RETURN_META_VALUE(MRES_IGNORED, true);
 }

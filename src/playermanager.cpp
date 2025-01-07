@@ -627,7 +627,10 @@ void ZEPlayer::CreateEntwatchHud()
 	pText->m_bEnabled(true);
 	pText->m_bFullbright(true);
 	pText->m_flFontSize(56.0f);
-	pText->m_Color->SetColor(m_colorEntwatchHud.r(), m_colorEntwatchHud.g(), m_colorEntwatchHud.b(), m_colorEntwatchHud.a());
+	int a = m_colorEntwatchHud.a();
+	if (a == 255)
+		a = 254; // 254 allows it to be visible through some items
+	pText->m_Color->SetColor(m_colorEntwatchHud.r(), m_colorEntwatchHud.g(), m_colorEntwatchHud.b(), a);
 	pText->m_flWorldUnitsPerPx(0.01f);
 
 	V_strncpy(pText->m_FontName, "Consolas", 64);
@@ -679,6 +682,12 @@ void ZEPlayer::CreateEntwatchHud()
 	}
 	
 	SetEntwatchHud(pText);
+}
+
+void ZEPlayer::SetEntwatchHudMode(int iMode)
+{
+	m_iEntwatchHudMode = iMode;
+	g_pUserPreferencesSystem->SetPreferenceInt(m_slot.Get(), EW_HUD_PREF_KEY_NAME, m_iEntwatchHudMode);
 }
 
 void ZEPlayer::SetEntwatchHudColor(Color colorHud)

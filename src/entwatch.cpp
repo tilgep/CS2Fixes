@@ -113,6 +113,7 @@ EWItemHandler::EWItemHandler(std::shared_ptr<EWItemHandler> pOther)
 {
 	type = pOther->type;
 	mode = pOther->mode;
+	szName = pOther->szName;
 	szHammerid = pOther->szHammerid;
 	szOutput = pOther->szOutput;
 	iCooldown = pOther->iCooldown;
@@ -145,6 +146,9 @@ EWItemHandler::EWItemHandler(ordered_json jsonKeys)
 		else if (value == "counterup")
 			type = EWHandlerType::CounterUp;
 	}
+
+	if (jsonKeys.contains("name"))
+		szName = jsonKeys["name"].get<std::string>();
 
 	if (jsonKeys.contains("hammerid"))
 		szHammerid = jsonKeys["hammerid"].get<std::string>();
@@ -280,7 +284,11 @@ void EWItemHandler::Use(float flCounterVal)
 
 	if(bShowUse)
 	{
-		ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "\x03%s \x05used %s%s", pController->GetPlayerName(), pItem->sChatColor, pItem->szItemName);
+		std::string extra = "";
+		if (szName != "")
+			extra = " (" + szName + ")";
+
+		ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "\x03%s \x05used %s%s%s", pController->GetPlayerName(), pItem->sChatColor, pItem->szItemName.c_str(), extra.c_str());
 		flLastShownUse = gpGlobals->curtime;
 	}
 }
@@ -354,7 +362,11 @@ void EWItemHandler::UseCounter(float flCounterVal)
 
 	if (bShowUse)
 	{
-		ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "\x03%s \x05used %s%s", pController->GetPlayerName(), pItem->sChatColor, pItem->szItemName);
+		std::string extra = "";
+		if (szName != "")
+			extra = " (" + szName + ")";
+
+		ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "\x03%s \x05used %s%s%s", pController->GetPlayerName(), pItem->sChatColor, pItem->szItemName.c_str(), extra.c_str());
 		flLastShownUse = gpGlobals->curtime;
 	}
 }
@@ -365,7 +377,7 @@ void EWItemHandler::UpdateHudText()
 	if (flLastUsed == -1.0)
 		timeleft = 0;
 	else
-		timeleft = iCooldown - (gpGlobals->curtime - flLastUsed);
+		timeleft = iCooldown - (gpGlobals->curtime - (flLastUsed+1));
 
 	switch (mode)
 	{
@@ -410,7 +422,7 @@ void EWItem::SetDefaultValues()
 	bShowHud = true;
 	transfer = EWCfg_Auto;
 	templated = EWCfg_Auto;
-	vecHandlers.Purge();
+	vecHandlers.clear();
 	vecTriggers.clear();
 }
 
@@ -461,11 +473,11 @@ EWItem::EWItem(std::shared_ptr<EWItem> pItem)
 	transfer = pItem->transfer;
 	templated = pItem->templated;
 
-	vecHandlers.Purge();
-	FOR_EACH_VEC(pItem->vecHandlers, i)
+	vecHandlers.clear();
+	for (int i = 0; i < (pItem->vecHandlers).size(); i++)
 	{
 		std::shared_ptr< EWItemHandler> pHandler = std::make_shared<EWItemHandler>(pItem->vecHandlers[i]);
-		vecHandlers.AddToTail(pHandler);
+		vecHandlers.push_back(pHandler);
 	}
 
 	vecTriggers.clear();
@@ -517,7 +529,7 @@ EWItem::EWItem(ordered_json jsonKeys, int _id)
 				if (bl == "")
 					continue;
 
-				vecTriggers.emplace_back(bl);
+				vecTriggers.push_back(bl);
 			}
 		}
 	}
@@ -529,7 +541,7 @@ EWItem::EWItem(ordered_json jsonKeys, int _id)
 			for (auto& [key, handlerEntry] : jsonKeys["handlers"].items())
 			{
 				std::shared_ptr<EWItemHandler> handler = std::make_shared<EWItemHandler>(handlerEntry);
-				vecHandlers.AddToTail(handler);
+				vecHandlers.push_back(handler);
 			}
 		}
 	}
@@ -539,7 +551,7 @@ EWItem::EWItem(ordered_json jsonKeys, int _id)
 bool EWItemInstance::RegisterHandler(CBaseEntity* pEnt, int iHandlerTemplateNum)
 {
 	bool found = false;
-	FOR_EACH_VEC(vecHandlers, i)
+	for (int i = 0; i < (vecHandlers).size(); i++)
 	{
 		std::shared_ptr<EWItemHandler> handler = vecHandlers[i];
 		if (handler->iEntIndex != -1)
@@ -577,7 +589,7 @@ bool EWItemInstance::RegisterHandler(CBaseEntity* pEnt, int iHandlerTemplateNum)
 
 bool EWItemInstance::RemoveHandler(CBaseEntity* pEnt)
 {
-	FOR_EACH_VEC(vecHandlers, i)
+	for (int i = 0; i < (vecHandlers).size(); i++)
 	{
 		if (vecHandlers[i]->iEntIndex == pEnt->entindex())
 		{
@@ -593,10 +605,10 @@ bool EWItemInstance::RemoveHandler(CBaseEntity* pEnt)
 
 int EWItemInstance::FindHandlerByEntIndex(int indexToFind)
 {
-	if (vecHandlers.Count() <= 0)
+	if (vecHandlers.size() <= 0)
 		return -1;
 
-	FOR_EACH_VEC(vecHandlers, i)
+	for (int i = 0; i < (vecHandlers).size(); i++)
 	{
 		if (vecHandlers[i]->iEntIndex == indexToFind)
 		{
@@ -608,7 +620,7 @@ int EWItemInstance::FindHandlerByEntIndex(int indexToFind)
 
 void EWItemInstance::FindExistingHandlers()
 {
-	FOR_EACH_VEC(vecHandlers, i)
+	for (int i = 0; i < (vecHandlers).size(); i++)
 	{
 		std::shared_ptr<EWItemHandler> handler = vecHandlers[i];
 		
@@ -797,9 +809,9 @@ void EWItemInstance::Drop(EWDropReason reason, CCSPlayerController* pController)
 
 std::string EWItemInstance::GetHandlerStateText()
 {
-	std::string sText = "";
+	std::string sText = "+";
 	bool first = true;
-	FOR_EACH_VEC(vecHandlers, i)
+	for (int i = 0; i < (vecHandlers).size(); i++)
 	{
 		if (!vecHandlers[i]->bShowHud)
 			continue;
@@ -807,7 +819,7 @@ std::string EWItemInstance::GetHandlerStateText()
 		vecHandlers[i]->UpdateHudText();
 		if (first)
 		{
-			sText.append(vecHandlers[i]->szHudText);
+			sText = vecHandlers[i]->szHudText;
 			first = false;
 		}
 		else
@@ -816,7 +828,7 @@ std::string EWItemInstance::GetHandlerStateText()
 			sText.append(vecHandlers[i]->szHudText);
 		}
 	}
-	Message("%s Item handler text: %s\n", szItemName.c_str(), sText.c_str());
+	//Message("%s Item handler text: %s\n", szItemName.c_str(), sText.c_str());
 	return sText;
 }
 
@@ -831,16 +843,16 @@ void CEWHandler::UnLoadConfig()
 	//Clantags first so scores can be set back properly
 	ResetAllClantags();
 
-	mapItemConfig.Purge();
+	mapItemConfig.clear();
 
-	FOR_EACH_VEC(vecItems, i)
+	for (int i = 0; i < (vecItems).size(); i++)
 	{
-		FOR_EACH_VEC(vecItems[i]->vecHandlers, j)
+		for (int j = 0; j < (vecItems[i]->vecHandlers).size(); j++)
 		{
 			vecItems[i]->vecHandlers[j]->RemoveHook();
 		}
 	}
-	vecItems.Purge();
+	vecItems.clear();
 
 	RemoveAllTriggers();
 
@@ -888,12 +900,12 @@ void CEWHandler::LoadConfig(const char* sFilePath)
 		}
 
 		std::string sHammerid = jsonItemData["hammerid"].get<std::string>();
-		std::shared_ptr<EWItem> item = std::make_shared<EWItem>(jsonItemData, mapItemConfig.Count());
+		std::shared_ptr<EWItem> item = std::make_shared<EWItem>(jsonItemData, mapItemConfig.size());
 
-		mapItemConfig.Insert(hash_32_fnv1a_const(sHammerid.c_str()), item);
+		mapItemConfig[hash_32_fnv1a_const(sHammerid.c_str())] = item;
 	}
 
-	if (mapItemConfig.Count() > 0)
+	if (mapItemConfig.size() > 0)
 	{
 		// Hook FireOutput
 		if (!SetupFireOutputInternalDetour())
@@ -914,12 +926,13 @@ void CEWHandler::PrintLoadedConfig(CPlayerSlot slot)
 		return;
 	}
 
-	FOR_EACH_MAP(mapItemConfig, i)
+	int i = -1;
+	for (auto const& [key, item] : mapItemConfig)
 	{
-		std::shared_ptr<EWItem> item = mapItemConfig.Element(i);
+		i++;
 		if (!item)
 		{
-			ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "Null item int the item map at pos %d", i);
+			ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "Null item in the item map at pos %d", i);
 			continue;
 		}
 
@@ -937,13 +950,13 @@ void CEWHandler::PrintLoadedConfig(CPlayerSlot slot)
 			ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX " Transfer:  False");
 
 		ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX " ");
-		if (item->vecHandlers.Count() == 0)
+		if (item->vecHandlers.size() == 0)
 		{
 			ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "        No handlers set.");
 		}
 		else
 		{
-			FOR_EACH_VEC(item->vecHandlers, j)
+			for (int j = 0; j < (item->vecHandlers).size(); j++)
 			{
 				// "          "
 				ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "          --------- Handler %d ---------", j);
@@ -978,16 +991,7 @@ void CEWHandler::PrintLoadedConfig(CPlayerSlot slot)
 
 void CEWHandler::ClearItems()
 {
-	vecItems.Purge();
-}
-
-int CEWHandler::FindItemIdByWeapon(std::string sHammerid)
-{
-	uint16 i = mapItemConfig.Find(hash_32_fnv1a_const(sHammerid.c_str()));
-	//Message("Finding... %d\n", i);
-	if (!mapItemConfig.IsValidIndex(i))
-		return -1;
-	return (int)i;
+	vecItems.clear();
 }
 
 /*
@@ -996,7 +1000,7 @@ int CEWHandler::FindItemIdByWeapon(std::string sHammerid)
  */
 int CEWHandler::FindItemInstanceByWeapon(int iWeaponEnt)
 {
-	FOR_EACH_VEC(vecItems, i)
+	for (int i = 0; i < (vecItems).size(); i++)
 	{
 		if (vecItems[i]->iWeaponEnt == -1)
 			continue;
@@ -1009,7 +1013,7 @@ int CEWHandler::FindItemInstanceByWeapon(int iWeaponEnt)
 
 int CEWHandler::FindItemInstanceByOwner(int iOwnerSlot, bool bOnlyTransferrable, int iStartItem)
 {
-	for (int i = iStartItem; i < vecItems.Count(); i++)
+	for (int i = iStartItem; i < vecItems.size(); i++)
 	{
 		if (bOnlyTransferrable && vecItems[i]->transfer == EWCfg_No)
 			continue;
@@ -1023,14 +1027,14 @@ int CEWHandler::FindItemInstanceByOwner(int iOwnerSlot, bool bOnlyTransferrable,
 	return -1;
 }
 
-int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransferrable)
+int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransferrable, int iStartItem)
 {
 	std::string lowercaseInput = "";
 	for (char ch : sItemName) {
 		lowercaseInput += std::tolower(ch);
 	}
 
-	FOR_EACH_VEC(vecItems, i)
+	for (int i = iStartItem; i < (vecItems).size(); i++)
 	{
 		if (bOnlyTransferrable && vecItems[i]->transfer == EWCfg_No)
 			continue;
@@ -1063,7 +1067,7 @@ int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransfer
 void CEWHandler::RegisterHandler(CBaseEntity* pEnt)
 {
 	int templatenum = GetTemplateSuffixNumber(pEnt->GetName());
-	FOR_EACH_VEC(vecItems, i)
+	for (int i = 0; i < (vecItems).size(); i++)
 	{
 		if (vecItems[i]->RegisterHandler(pEnt, templatenum))
 		{
@@ -1075,9 +1079,8 @@ void CEWHandler::RegisterHandler(CBaseEntity* pEnt)
 
 bool CEWHandler::RegisterTrigger(CBaseEntity* pEnt)
 {
-	FOR_EACH_MAP_FAST(mapItemConfig, i)
+	for (auto const& [key, pItem] : mapItemConfig)
 	{
-		std::shared_ptr<EWItem> pItem = mapItemConfig.Element(i);
 		if (pItem->vecTriggers.size() < 1)
 			continue;
 
@@ -1097,7 +1100,7 @@ bool CEWHandler::RegisterTrigger(CBaseEntity* pEnt)
 
 void CEWHandler::AddTouchHook(CBaseEntity* pEnt)
 {
-	if (vecHookedTriggers.Count() <= 0)
+	if (vecHookedTriggers.size() <= 0)
 	{
 		static int startOffset = g_GameConfig->GetOffset("CBaseEntity::StartTouch");
 		SH_MANUALHOOK_RECONFIGURE(CBaseEntity_StartTouch, startOffset, 0, 0);
@@ -1112,7 +1115,7 @@ void CEWHandler::AddTouchHook(CBaseEntity* pEnt)
 		iEndTouchHookId = SH_ADD_MANUALVPHOOK(CBaseEntity_EndTouch, pEnt, SH_MEMBER(this, &CEWHandler::Hook_Touch), false);
 	}
 
-	vecHookedTriggers.AddToTail(pEnt->GetHandle());
+	vecHookedTriggers.push_back(pEnt->GetHandle());
 }
 
 void CEWHandler::Hook_Touch(CBaseEntity* pOther)
@@ -1122,7 +1125,7 @@ void CEWHandler::Hook_Touch(CBaseEntity* pOther)
 		RETURN_META(MRES_IGNORED);
 
 	bool bFound = false;
-	FOR_EACH_VEC(vecHookedTriggers, i)
+	for (int i = 0; i < (vecHookedTriggers).size(); i++)
 	{
 		if (vecHookedTriggers[i] == pEntity->GetHandle())
 		{
@@ -1152,12 +1155,12 @@ void CEWHandler::Hook_Touch(CBaseEntity* pOther)
 
 bool CEWHandler::RemoveTrigger(CBaseEntity* pEnt)
 {
-	FOR_EACH_VEC(vecHookedTriggers, i)
+	for (int i = 0; i < (vecHookedTriggers).size(); i++)
 	{
 		if (vecHookedTriggers[i] == pEnt->GetHandle())
 		{
-			vecHookedTriggers.Remove(i);
-			if (vecHookedTriggers.Count() <= 0)
+			vecHookedTriggers.erase(vecHookedTriggers.begin() + i);
+			if (vecHookedTriggers.size() <= 0)
 			{
 				Message("[EntWatch] Fully unhooking touch hooks\n");
 				SH_REMOVE_HOOK_ID(iStartTouchHookId);
@@ -1182,12 +1185,12 @@ void CEWHandler::RemoveAllTriggers()
 	iStartTouchHookId = -1;
 	iTouchHookId = -1;
 	iEndTouchHookId = -1;
-	vecHookedTriggers.Purge();
+	vecHookedTriggers.clear();
 }
 
 void CEWHandler::RemoveHandler(CBaseEntity* pEnt)
 {
-	FOR_EACH_VEC(vecItems, i)
+	for (int i = 0; i < (vecItems).size(); i++)
 	{
 		if (vecItems[i]->RemoveHandler(pEnt))
 			return;
@@ -1199,7 +1202,7 @@ void CEWHandler::ResetAllClantags()
 	// Reset item holders scores to what they should be
 	if (g_iItemHolderScore != 0)
 	{
-		FOR_EACH_VEC(vecItems, i)
+		for (int i = 0; i < (vecItems).size(); i++)
 		{
 			if (vecItems[i]->bHasThisClantag)
 			{
@@ -1235,10 +1238,18 @@ void CEWHandler::ResetAllClantags()
 	EW_SendBeginNewMatchEvent();
 }
 
-void CEWHandler::RegisterItem(int itemId, CBasePlayerWeapon* pWeapon)
+bool CEWHandler::RegisterItem(CBasePlayerWeapon* pWeapon)
 {	
-	std::shared_ptr<EWItem> item = mapItemConfig.Element(itemId);
-	Message("Registering item %s(id:%d) (item instance:%d)\n", item->szItemName, itemId, vecItems.Count() + 1);
+	std::string sHammerid = pWeapon->m_sUniqueHammerID.Get().String();
+
+	auto i = mapItemConfig.find(hash_32_fnv1a_const(sHammerid.c_str()));
+
+	if (i == mapItemConfig.end())
+		return false;
+
+	std::shared_ptr<EWItem> item = i->second;
+
+	Message("Registering item %s (item instance:%d)\n", item->szItemName, vecItems.size() + 1);
 
 	std::shared_ptr<EWItemInstance> instance = std::make_shared<EWItemInstance>(pWeapon->entindex(), item);
 
@@ -1270,9 +1281,9 @@ void CEWHandler::RegisterItem(int itemId, CBasePlayerWeapon* pWeapon)
 
 	// Place items in order of the config
 	int place = -1;
-	FOR_EACH_VEC(vecItems, i)
+	for (int i = 0; i < (vecItems).size(); i++)
 	{
-		if (vecItems[i]->id >= itemId)
+		if (vecItems[i]->id >= instance->id)
 		{
 			place = i;
 			break;
@@ -1280,9 +1291,11 @@ void CEWHandler::RegisterItem(int itemId, CBasePlayerWeapon* pWeapon)
 	}
 
 	if (place == -1) // reached the end, our id still higher
-		vecItems.AddToTail(instance);
+		vecItems.push_back(instance);
 	else
-		vecItems.InsertBefore(place, instance);
+		vecItems.insert(vecItems.begin() + place, instance);
+
+	return true;
 }
 
 // Weapon entity of specified item has been deleted
@@ -1291,7 +1304,7 @@ void CEWHandler::RemoveWeaponFromItem(int itemId)
 	std::shared_ptr<EWItemInstance> pItem = vecItems[itemId];
 	if (!pItem)
 	{
-		vecItems.Remove(itemId);
+		vecItems.erase(vecItems.begin() + itemId);
 		return;
 	}
 
@@ -1309,27 +1322,27 @@ void CEWHandler::RemoveWeaponFromItem(int itemId)
 }
 
 /* Player picked up a weapon in the config */
-void CEWHandler::PlayerPickup(CCSPlayerPawn* pPawn, CBasePlayerWeapon* pPlayerWeapon)
+void CEWHandler::PlayerPickup(CCSPlayerPawn* pPawn, int iItemInstance)
 {
-	FOR_EACH_VEC(vecItems, i)
+	if (iItemInstance < 0 || iItemInstance >= vecItems.size())
+		return;
+
+	std::shared_ptr<EWItemInstance> item = vecItems[iItemInstance];
+	
+	if (item->iWeaponEnt == -1)
+		return;
+
+	item->Pickup(pPawn->m_hOriginalController->GetPlayerSlot());
+
+	if (!m_bHudTicking)
 	{
-		if (vecItems[i]->iWeaponEnt == -1)
-			continue;
-
-		if (pPlayerWeapon->entindex() != vecItems[i]->iWeaponEnt)
-			continue;
-
-		vecItems[i]->Pickup(pPawn->m_hOriginalController->GetPlayerSlot());
-
-		if (!m_bHudTicking)
-		{
-			m_bHudTicking = true;
-			new CTimer(EW_HUD_TICKRATE, false, false, []
-				{
-					return EW_UpdateHud();
-				});
-		}
+		m_bHudTicking = true;
+		new CTimer(EW_HUD_TICKRATE, false, false, []
+			{
+				return EW_UpdateHud();
+			});
 	}
+	
 }
 
 void CEWHandler::PlayerDrop(EWDropReason reason, int iItemInstance, CCSPlayerController* pController)
@@ -1341,7 +1354,7 @@ void CEWHandler::PlayerDrop(EWDropReason reason, int iItemInstance, CCSPlayerCon
 	// Death and disconnect drop all items currently owned
 	if (reason == EWDropReason::Drop)
 	{
-		if (iItemInstance == -1 || iItemInstance >= vecItems.Count())
+		if (iItemInstance == -1 || iItemInstance >= vecItems.size())
 			return;
 
 		std::shared_ptr<EWItemInstance> pItem = vecItems[iItemInstance];
@@ -1356,7 +1369,7 @@ void CEWHandler::PlayerDrop(EWDropReason reason, int iItemInstance, CCSPlayerCon
 	else
 	{
 		// Find all items owned by this player
-		FOR_EACH_VEC(vecItems, i)
+		for (int i = 0; i < (vecItems).size(); i++)
 		{
 			if (vecItems[i]->iOwnerSlot != pController->GetPlayerSlot())
 				continue;
@@ -1368,24 +1381,24 @@ void CEWHandler::PlayerDrop(EWDropReason reason, int iItemInstance, CCSPlayerCon
 
 void CEWHandler::AddUseHook(CBaseEntity* pEnt)
 {
-	if (vecUseHookedEntities.Count() <= 0)
+	if (vecUseHookedEntities.size() <= 0)
 	{
 		static int offset = g_GameConfig->GetOffset("CBaseEntity::Use");
 		SH_MANUALHOOK_RECONFIGURE(CBaseEntity_Use, offset, 0, 0);
 		iUseHookId = SH_ADD_MANUALVPHOOK(CBaseEntity_Use, pEnt, SH_MEMBER(this, &CEWHandler::Hook_Use), false);
 	}
 
-	vecUseHookedEntities.AddToTail(pEnt->GetHandle());
+	vecUseHookedEntities.push_back(pEnt->GetHandle());
 }
 
 void CEWHandler::RemoveUseHook(CBaseEntity* pEnt)
 {
-	FOR_EACH_VEC(vecUseHookedEntities, i)
+	for (int i = 0; i < (vecUseHookedEntities).size(); i++)
 	{
 		if (vecUseHookedEntities[i] == pEnt->GetHandle())
 		{
-			vecUseHookedEntities.Remove(i);
-			if (vecUseHookedEntities.Count() <= 0)
+			vecUseHookedEntities.erase(vecUseHookedEntities.begin() + i);
+			if (vecUseHookedEntities.size() <= 0)
 			{
 				Message("[EntWatch] Fully unhooking use hook\n");
 				SH_REMOVE_HOOK_ID(iUseHookId);
@@ -1404,7 +1417,7 @@ void CEWHandler::Hook_Use(InputData_t* pInput)
 		RETURN_META(MRES_IGNORED);
 
 	bool bFound = false;
-	FOR_EACH_VEC(vecUseHookedEntities, i)
+	for (int i = 0; i < (vecUseHookedEntities).size(); i++)
 	{
 		if (vecUseHookedEntities[i] == pEntity->GetHandle())
 		{
@@ -1419,7 +1432,7 @@ void CEWHandler::Hook_Use(InputData_t* pInput)
 	int index = pEntity->entindex();
 	int itemIndex = -1;
 	int handlerIndex = -1;
-	FOR_EACH_VEC(vecItems, i)
+	for (int i = 0; i < (vecItems).size(); i++)
 	{
 		int j = vecItems[i]->FindHandlerByEntIndex(index);
 		if (j != -1)
@@ -1477,7 +1490,7 @@ float EW_UpdateHud()
 	std::string sHudTextNoPlayerNames = "";
 	static bool bWasEmptyPreviously = false;
 
-	FOR_EACH_VEC(g_pEWHandler->vecItems, i)
+	for (int i = 0; i < (g_pEWHandler->vecItems).size(); i++)
 	{
 		std::shared_ptr<EWItemInstance> pItem = g_pEWHandler->vecItems[i];
 		if (!pItem)
@@ -1502,8 +1515,6 @@ float EW_UpdateHud()
 	if (sHudText != "")
 	{
 		bWasEmptyPreviously = false;
-		sHudText.insert(0, "--EntWatch !hud--");
-		sHudTextNoPlayerNames.insert(0, "--EntWatch !hud--");
 	}
 	else
 	{
@@ -1511,8 +1522,7 @@ float EW_UpdateHud()
 			return EW_HUD_TICKRATE;
 		bWasEmptyPreviously = true;
 	}
-		
-
+	
 	for (int i = 0; i < gpGlobals->maxClients; i++)
 	{
 		CCSPlayerController* pController = CCSPlayerController::FromSlot(i);
@@ -1574,14 +1584,13 @@ void EW_OnEntitySpawned(CEntityInstance* pEntity)
 	const char* classname = pEnt->GetClassname();
 	if (!strncmp(classname, "weapon_", 7))
 	{
-		int i = g_pEWHandler->FindItemIdByWeapon(pEnt->m_sUniqueHammerID.Get().String());
-		if (i != -1)
-		{
-			g_pEWHandler->RegisterItem(i, (CBasePlayerWeapon*)pEntity);
 
-			int itemindex = g_pEWHandler->vecItems.Count() - 1;
+		bool isItem = g_pEWHandler->RegisterItem((CBasePlayerWeapon*)pEntity);
+		if (isItem)
+		{
+			int itemindex = g_pEWHandler->vecItems.size() - 1;
 			new CTimer(0.6, false, false, [itemindex] { 
-				if (itemindex > -1 && itemindex < g_pEWHandler->vecItems.Count())
+				if (itemindex > -1 && itemindex < g_pEWHandler->vecItems.size())
 					g_pEWHandler->vecItems[itemindex]->FindExistingHandlers();
 				return -1.0f;
 				});
@@ -1638,7 +1647,7 @@ void EW_OnEntityDeleted(CEntityInstance* pEntity)
 void EW_OnWeaponDeleted(CBaseEntity* pEntity)
 {
 	int id = g_pEWHandler->FindItemInstanceByWeapon(pEntity->entindex());
-	if (id != -1 && id < g_pEWHandler->vecItems.Count())
+	if (id != -1 && id < g_pEWHandler->vecItems.size())
 	{
 		g_pEWHandler->RemoveWeaponFromItem(id);
 	}
@@ -1665,7 +1674,7 @@ bool EW_Detour_CCSPlayer_WeaponServices_CanUse(CCSPlayer_WeaponServices* pWeapon
 	return true;
 }
 
-void EW_Detour_CCSPlayer_WeaponServices_EquipWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon* pPlayerWeapon)
+void EW_Detour_CCSPlayer_WeaponServices_EquipWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon* pWeapon)
 {
 	if (!g_pEWHandler || !g_pEWHandler->bConfigLoaded)
 		return;
@@ -1675,15 +1684,14 @@ void EW_Detour_CCSPlayer_WeaponServices_EquipWeapon(CCSPlayer_WeaponServices* pW
 		return;
 
 	// We don't care about weapons that don't have a hammerid
-	if (!V_strcmp(pPlayerWeapon->m_sUniqueHammerID().Get(), ""))
+	if (!V_strcmp(pWeapon->m_sUniqueHammerID().Get(), ""))
 		return;
 
-	std::string hammerid = pPlayerWeapon->m_sUniqueHammerID.Get().String();
-	int i = g_pEWHandler->FindItemIdByWeapon(hammerid);
+	int i = g_pEWHandler->FindItemInstanceByWeapon(pWeapon->entindex());
 	if (i == -1)
 		return;
 
-	g_pEWHandler->PlayerPickup(pPawn, pPlayerWeapon);
+	g_pEWHandler->PlayerPickup(pPawn, i);
 }
 
 void EW_DropWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon* pWeapon)
@@ -1744,6 +1752,19 @@ void EW_PlayerDeath(IGameEvent* pEvent)
 	}
 }
 
+// Needed for when weapons are force dropped just before death
+void EW_PlayerDeathPre(CCSPlayerController* pController)
+{
+	Message("EWDEATHPRE: m_iConnected:%d  team:%d\n", pController->m_iConnected(), pController->m_iTeamNum());
+	if (!g_pEWHandler->IsConfigLoaded())
+		return;
+
+	if (!pController->IsConnected())
+		return;
+
+	g_pEWHandler->PlayerDrop(EWDropReason::Death, -1, pController);
+}
+
 void EW_PlayerDisconnect(int slot)
 {
 	g_pEWHandler->m_bEbanned[slot] = false;
@@ -1791,15 +1812,15 @@ void EW_FireOutput(const CEntityIOOutput* pThis, CEntityInstance* pActivator, CE
 	if (!EW_IsFireOutputHooked() || !pCaller)
 		return;
 
-	FOR_EACH_VEC(g_pEWHandler->vecItems, i)
+	for (int i = 0; i < (g_pEWHandler->vecItems).size(); i++)
 	{
 		if (g_pEWHandler->vecItems[i]->iWeaponEnt == -1)
 			continue;
 
-		if (g_pEWHandler->vecItems[i]->vecHandlers.Count() <= 0)
+		if (g_pEWHandler->vecItems[i]->vecHandlers.size() <= 0)
 			continue;
 
-		FOR_EACH_VEC(g_pEWHandler->vecItems[i]->vecHandlers, j)
+		for (int j = 0; j < (g_pEWHandler->vecItems[i]->vecHandlers).size(); j++)
 		{
 			std::shared_ptr<EWItemHandler> handler = g_pEWHandler->vecItems[i]->vecHandlers[j];
 			if (pCaller->GetEntityIndex().Get() != handler->iEntIndex)
@@ -1949,13 +1970,16 @@ CON_COMMAND_CHAT_FLAGS(eunban, "Unban a player from picking up items", ADMFLAG_B
 		PrintMultiAdminAction(nType, pszCommandPlayerName, "eunbanned", "", EW_PREFIX);
 }
 
-bool g_bTransferForceEquip = false;
-FAKE_BOOL_CVAR(entwatch_transfer_forceequip, "Whether to force call EquipWeapon when transferring entwatch items", g_bTransferForceEquip, false, false);
-
 CON_COMMAND_CHAT_FLAGS(etransfer, "Transfer an EntWatch item", ADMFLAG_GENERIC)
 {
 	if (!g_bEnableEntWatch)
 		return;
+
+	if (!g_pEWHandler->IsConfigLoaded())
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "No EntWatch config is currently loaded!");
+		return;
+	}
 
 	if (args.ArgC() < 3)
 	{
@@ -1993,6 +2017,7 @@ CON_COMMAND_CHAT_FLAGS(etransfer, "Transfer an EntWatch item", ADMFLAG_GENERIC)
 	// Find receiver
 	if (!g_playerManager->CanTargetPlayers(player, args[2], iNumClients, pSlots, NO_MULTIPLE | NO_SPECTATOR | NO_DEAD))
 	{
+		// CanTargetPlayers prints error string if false
 		return;
 	}
 
@@ -2095,9 +2120,6 @@ CON_COMMAND_CHAT_FLAGS(etransfer, "Transfer an EntWatch item", ADMFLAG_GENERIC)
 		Vector vecOrigin = pReceiverPawn->GetAbsOrigin();
 		pItemWeapon->Teleport(&vecOrigin, nullptr, nullptr);
 
-		if (g_bTransferForceEquip)
-			pReceiverPawn->m_pWeaponServices()->EquipWeapon(pItemWeapon);
-
 		ZEPlayer* pZEOwner = g_playerManager->GetPlayer(pOwner->GetPlayerSlot());
 		char sOwnerInfo[64];
 		if (pZEOwner->IsFakeClient())
@@ -2151,9 +2173,6 @@ CON_COMMAND_CHAT_FLAGS(etransfer, "Transfer an EntWatch item", ADMFLAG_GENERIC)
 	// Give the item to the receiver
 	Vector vecOrigin = pReceiverPawn->GetAbsOrigin();
 	pItemWeapon->Teleport(&vecOrigin, nullptr, nullptr);
-
-	if (g_bTransferForceEquip)
-		pReceiverPawn->m_pWeaponServices()->EquipWeapon(pItemWeapon);
 
 	ZEPlayer* pZEReceiver = g_playerManager->GetPlayer(pReceiver->GetPlayerSlot());
 	char sReceiverInfo[64];

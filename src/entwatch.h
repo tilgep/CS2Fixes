@@ -82,6 +82,7 @@ struct EWItemHandler
 	// Config variables
 	EWHandlerType type;
 	EWHandlerMode mode;
+	std::string szName;
 	std::string szHammerid;
 	std::string szOutput;		/* Output name for when this is used e.g. OnPressed */
 	int iCooldown;
@@ -124,7 +125,7 @@ struct EWItem
 	bool bShowHud;					/* Whether to show this item on hud/scoreboard */
 	EWAutoConfigOption transfer;					/* Can this item be transferred */
 	EWAutoConfigOption templated;				/* Is this item templated (should we check for template suffix) */
-	CUtlVector<std::shared_ptr<EWItemHandler>> vecHandlers;		/* List of item abilities */
+	std::vector<std::shared_ptr<EWItemHandler>> vecHandlers;		/* List of item abilities */
 	std::vector<std::string> vecTriggers;		/* HammerIds of triggers associated with this item */
 
 	void SetDefaultValues();
@@ -143,6 +144,7 @@ struct EWItemInstance : EWItem	/* Current instance of defined items */
 	char sClantag[64];
 	bool bHasThisClantag;
 	int iTeamNum;
+	std::string sLastOwnerName; // For etransfer info
 
 public:
 	EWItemInstance(int iWeapon, std::shared_ptr<EWItem> pItem) :
@@ -170,7 +172,6 @@ public:
 	CEWHandler()
 	{
 		bConfigLoaded = false;
-		mapItemConfig.SetLessFunc(DefLessFunc(uint32));
 		m_bHudTicking = false;
 		iUseHookId = -1;
 		iStartTouchHookId = -1;
@@ -194,10 +195,9 @@ public:
 
 	void ClearItems();
 
-	int FindItemIdByWeapon(std::string sHammerid);
 	int FindItemInstanceByWeapon(int iWeaponEnt);
 	int FindItemInstanceByOwner(int iOwnerSlot, bool bOnlyTransferrable, int iStartItem);
-	int FindItemInstanceByName(std::string sItemName, bool bOnlyTransferrable);
+	int FindItemInstanceByName(std::string sItemName, bool bOnlyTransferrable, int iStartItem);
 	void RegisterHandler(CBaseEntity* pEnt);
 	bool RegisterTrigger(CBaseEntity* pEnt);
 	void AddTouchHook(CBaseEntity* pEnt);
@@ -207,24 +207,24 @@ public:
 	void RemoveHandler(CBaseEntity* pEnt);
 	void ResetAllClantags();
 
-	void RegisterItem(int itemId, CBasePlayerWeapon* pWeapon);
+	bool RegisterItem(CBasePlayerWeapon* pWeapon);
 	void RemoveWeaponFromItem(int itemId);
-	void PlayerPickup(CCSPlayerPawn* pPawn, CBasePlayerWeapon* pPlayerWeapon);
+	void PlayerPickup(CCSPlayerPawn* pPawn, int iItemInstance);
 	void PlayerDrop(EWDropReason reason, int iItemInstance, CCSPlayerController* pController);
 
 	void AddUseHook(CBaseEntity* pEnt);
 	void RemoveUseHook(CBaseEntity* pEnt);
 	void Hook_Use(InputData_t* pInput);
 
-	CUtlMap<uint32, std::shared_ptr<EWItem>> mapItemConfig;		/* items defined in the config */
-	CUtlVector<std::shared_ptr<EWItemInstance>> vecItems;		/* all items found spawned */
+	std::map<uint32, std::shared_ptr<EWItem>> mapItemConfig;		/* items defined in the config */
+	std::vector<std::shared_ptr<EWItemInstance>> vecItems;		/* all items found spawned */
 
-	CUtlVector<CHandle<CBaseEntity>> vecHookedTriggers;
+	std::vector<CHandle<CBaseEntity>> vecHookedTriggers;
 	int iStartTouchHookId;
 	int iTouchHookId;
 	int iEndTouchHookId;
 
-	CUtlVector<CHandle<CBaseEntity>> vecUseHookedEntities;
+	std::vector<CHandle<CBaseEntity>> vecUseHookedEntities;
 	int iUseHookId;
 
 	bool m_bHudTicking;
@@ -245,6 +245,7 @@ bool EW_Detour_CCSPlayer_WeaponServices_CanUse(CCSPlayer_WeaponServices* pWeapon
 void EW_Detour_CCSPlayer_WeaponServices_EquipWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon* pPlayerWeapon);
 void EW_DropWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon* pWeapon);
 void EW_PlayerDeath(IGameEvent* pEvent);
+void EW_PlayerDeathPre(CCSPlayerController* pController);
 void EW_PlayerDisconnect(int slot);
 void EW_SendBeginNewMatchEvent();
 bool EW_IsFireOutputHooked();
