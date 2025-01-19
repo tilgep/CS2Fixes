@@ -38,11 +38,11 @@ enum CSPlayerState
 class CCSPlayerPawnBase : public CBasePlayerPawn
 {
 public:
-	DECLARE_SCHEMA_CLASS(CCSPlayerPawnBase);
+	DECLARE_SCHEMA_CLASS(CCSPlayerPawnBase)
 	SCHEMA_FIELD(QAngle, m_angEyeAngles)
 	SCHEMA_FIELD(CSPlayerState, m_iPlayerState)
 	SCHEMA_FIELD(CHandle<CCSPlayerController>, m_hOriginalController)
-	SCHEMA_FIELD_POINTER(CPlayer_ViewModelServices, m_pViewModelServices)
+	SCHEMA_FIELD(CCSPlayer_ViewModelServices*, m_pViewModelServices)
 
 	CCSPlayerController* GetOriginalController()
 	{
@@ -58,7 +58,7 @@ public:
 class CCSPlayerPawn : public CCSPlayerPawnBase
 {
 public:
-	DECLARE_SCHEMA_CLASS(CCSPlayerPawn);
+	DECLARE_SCHEMA_CLASS(CCSPlayerPawn)
 
 	SCHEMA_FIELD(float, m_flVelocityModifier)
 	SCHEMA_FIELD(CCSPlayer_ActionTrackingServices*, m_pActionTrackingServices)
@@ -66,10 +66,5 @@ public:
 	[[nodiscard]] CCSPlayer_CameraServices* GetCameraService()
 	{
 		return reinterpret_cast<CCSPlayer_CameraServices*>(m_pCameraServices());
-	}
-
-	CCSPlayer_ViewModelServices* GetViewModelService()
-	{
-		return reinterpret_cast<CCSPlayer_ViewModelServices*>(m_pViewModelServices());
 	}
 };

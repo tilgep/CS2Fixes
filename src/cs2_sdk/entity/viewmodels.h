@@ -30,6 +30,7 @@ class CBaseViewModel : public CBaseAnimGraph
 {
 public:
 	DECLARE_SCHEMA_CLASS(CBaseViewModel)
+	SCHEMA_FIELD(uint32_t, m_nViewModelIndex)
 };
 
 class CPredictedViewModel : public CBaseViewModel

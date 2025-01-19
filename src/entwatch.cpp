@@ -89,8 +89,10 @@ void EWItemHandler::SetDefaultValues()
 	mode = EWHandlerMode::Mode_None;
 	szHammerid = "";
 	szOutput = "";
-	iCooldown = 0;
+	flCooldown = 0.0;
 	iMaxUses = 0;
+	flOffset = 0.0;
+	flMaxOffset = 0.0;
 	bShowUse = true;
 	bShowHud = true;
 	templated = EWCfg_Auto;
@@ -102,8 +104,10 @@ void EWItemHandler::Print()
 	Message("     mode: %d\n", (int)mode);
 	Message(" hammerid: %s\n", szHammerid.c_str());
 	Message("    event: %s\n", szOutput.c_str());
-	Message(" cooldown: %d\n", iCooldown);
+	Message(" cooldown: %.1f\n", flCooldown);
 	Message("  maxuses: %d\n", iMaxUses);
+	Message("   offset: %.1f\n", flOffset);
+	Message("maxoffset: %.1f\n", flMaxOffset);
 	Message(" bshowuse: %s\n", bShowUse ? "True" : "False");
 	Message(" bshowhud: %s\n", bShowHud ? "True" : "False");
 	Message("templated: %d\n", (int)templated);
@@ -116,8 +120,10 @@ EWItemHandler::EWItemHandler(std::shared_ptr<EWItemHandler> pOther)
 	szName = pOther->szName;
 	szHammerid = pOther->szHammerid;
 	szOutput = pOther->szOutput;
-	iCooldown = pOther->iCooldown;
+	flCooldown = pOther->flCooldown;
 	iMaxUses = pOther->iMaxUses;
+	flOffset = pOther->flOffset;
+	flMaxOffset = pOther->flMaxOffset;
 	bShowUse = pOther->bShowUse;
 	bShowHud = pOther->bShowHud;
 	templated = pOther->templated;
@@ -160,10 +166,29 @@ EWItemHandler::EWItemHandler(ordered_json jsonKeys)
 		mode = (EWHandlerMode)jsonKeys["mode"].get<int>();
 
 	if (jsonKeys.contains("cooldown"))
-		iCooldown = jsonKeys["cooldown"].get<int>();
+		flCooldown = jsonKeys["cooldown"].get<float>();
 
 	if (jsonKeys.contains("maxuses"))
 		iMaxUses = jsonKeys["maxuses"].get<int>();
+
+	if (jsonKeys.contains("offset"))
+	{
+		int size = jsonKeys["offset"].size();
+		if (size == 1)
+		{
+			if (jsonKeys["offset"].is_array())
+				flOffset = jsonKeys["offset"][0].get<float>();
+			else
+				flOffset = jsonKeys["offset"].get<float>();
+			
+			flMaxOffset = flOffset;
+		}
+		else if (size >= 2)
+		{
+			flOffset = jsonKeys["offset"][0].get<float>();
+			flMaxOffset = jsonKeys["offset"][1].get<float>();
+		}
+	}
 
 	if (jsonKeys.contains("message"))
 		bShowUse = jsonKeys["message"].get<bool>();
@@ -203,7 +228,7 @@ void EWItemHandler::RegisterEntity(CBaseEntity* pEntity)
 		if (!pCounter)
 			return;
 
-		float max = pCounter->m_flMax - pCounter->m_flMin;
+		float max = (pCounter->m_flMax - pCounter->m_flMin) + flMaxOffset;
 		
 		if (mode == CounterValue)
 		{
@@ -214,7 +239,7 @@ void EWItemHandler::RegisterEntity(CBaseEntity* pEntity)
 				val = pCounter->GetCounterValue() - pCounter->m_flMin;
 			else if (type == CounterUp)
 				val = pCounter->m_flMax - pCounter->GetCounterValue();
-			flCounterValue = val;
+			flCounterValue = val + flOffset;
 		}
 		else
 		{
@@ -224,16 +249,19 @@ void EWItemHandler::RegisterEntity(CBaseEntity* pEntity)
 			else if (type == CounterUp)
 				val = pCounter->GetCounterValue() - pCounter->m_flMin;
 
+			val += flOffset;
+
 			iCurrentUses = static_cast<int>(std::round(val));
 			iMaxUses = static_cast<int>(std::round(max));
 		}
+		//Message("Counter init values: %d/%d\n", iCurrentUses, iMaxUses);
 		break;
 	}
 }
 
 void EWItemHandler::Use(float flCounterVal)
 {
-	if (!pItem || pItem->iOwnerSlot == -1 || pItem->iWeaponEnt == -1)
+	if (!pItem || pItem->iWeaponEnt == -1)
 		return;
 
 	// No tracking is necessary if its not being shown anywhere
@@ -274,7 +302,9 @@ void EWItemHandler::Use(float flCounterVal)
 		return;
 	}
 
-	// Don't allow too much chat spam
+	if (pItem->iOwnerSlot == -1)
+		return;
+
 	if ((gpGlobals->curtime - flLastShownUse) < 0.1)
 		return;
 
@@ -295,10 +325,11 @@ void EWItemHandler::Use(float flCounterVal)
 
 void EWItemHandler::UseCounter(float flCounterVal)
 {
-	Message("USECOUNTER: CounterVal:%.2f\n", flCounterVal);
+	//Message("USECOUNTER: CounterVal:%.2f\n", flCounterVal);
 	CMathCounter* pCounter = (CMathCounter*)g_pEntitySystem->GetEntityInstance((CEntityIndex)iEntIndex);
 	if (!pCounter)
 		return;
+	
 	int newCurrentUses = 0;
 	switch (mode)
 	{
@@ -309,12 +340,14 @@ void EWItemHandler::UseCounter(float flCounterVal)
 			flLastUsed = gpGlobals->curtime;
 			break;
 		case MaxUses:
-			iMaxUses = pCounter->m_flMax - pCounter->m_flMin;
+			iMaxUses = (pCounter->m_flMax - pCounter->m_flMin) + flMaxOffset;
 
 			if (type == EWHandlerType::CounterDown)
 				newCurrentUses = pCounter->m_flMax - flCounterVal;
 			else if (type == EWHandlerType::CounterUp)
 				newCurrentUses = flCounterVal - pCounter->m_flMin;
+
+			newCurrentUses += flOffset;
 
 			if (newCurrentUses <= iCurrentUses) // Our allowed uses increased or didnt change(?), dont show in chat
 			{
@@ -326,12 +359,14 @@ void EWItemHandler::UseCounter(float flCounterVal)
 			flLastUsed = gpGlobals->curtime;
 			break;
 		case CooldownAfterUses:
-			iMaxUses = pCounter->m_flMax - pCounter->m_flMin;
+			iMaxUses = (pCounter->m_flMax - pCounter->m_flMin) + flMaxOffset;
 			
 			if (type == EWHandlerType::CounterDown)
 				newCurrentUses = pCounter->m_flMax - flCounterVal;
 			else if (type == EWHandlerType::CounterUp)
 				newCurrentUses = flCounterVal - pCounter->m_flMin;
+
+			newCurrentUses += flOffset;
 
 			if (newCurrentUses <= iCurrentUses) // Our allowed uses increased or didnt change(?), dont show in chat
 			{
@@ -344,14 +379,20 @@ void EWItemHandler::UseCounter(float flCounterVal)
 				flLastUsed = gpGlobals->curtime;
 			break;
 		case CounterValue:
-			flCounterMax = pCounter->m_flMax - pCounter->m_flMin;
+			flCounterMax = (pCounter->m_flMax - pCounter->m_flMin) + flMaxOffset;
 
 			if (type == EWHandlerType::CounterDown)
 				flCounterValue = flCounterVal - pCounter->m_flMin;
 			else if (type == EWHandlerType::CounterUp)
 				flCounterValue = pCounter->m_flMax - flCounterVal;
+
+			flCounterValue += flOffset;
+
 			return;
 	}
+
+	if (pItem->iOwnerSlot == -1)
+		return;
 
 	if ((gpGlobals->curtime - flLastShownUse) < 0.1)
 		return;
@@ -377,7 +418,7 @@ void EWItemHandler::UpdateHudText()
 	if (flLastUsed == -1.0)
 		timeleft = 0;
 	else
-		timeleft = iCooldown - (gpGlobals->curtime - (flLastUsed+1));
+		timeleft = flCooldown - (gpGlobals->curtime - (flLastUsed+1));
 
 	switch (mode)
 	{
@@ -635,7 +676,7 @@ void EWItemInstance::FindExistingHandlers()
 			{
 				handler->RegisterEntity(pTarget);
 				handler->pItem = this;
-				Message("LATE REGISTERED HANDLER. Item:%s  Handler:%d  entindex:%d\n", szItemName.c_str(), i, pTarget->entindex());
+				Message("[Entwatch] LATE REGISTERED HANDLER. Item:%s  Handler:%d  entindex:%d\n", szItemName.c_str(), i, pTarget->entindex());
 				break;
 			}
 		}
@@ -654,6 +695,8 @@ void EWItemInstance::Pickup(int slot)
 		iOwnerSlot = -1;
 		return;
 	}
+
+	sLastOwnerName = pController->GetPlayerName();
 
 	if (iTeamNum == CS_TEAM_NONE)
 	{
@@ -691,7 +734,7 @@ void EWItemInstance::Pickup(int slot)
 				pController->m_iScore = score;
 			}
 
-			EW_SendBeginNewMatchEvent();
+			EW_SendBeginNewMatchEvent(false);
 		}
 	}
 
@@ -740,7 +783,7 @@ void EWItemInstance::Drop(EWDropReason reason, CCSPlayerController* pController)
 			pController->m_szClan("");
 		}
 
-		EW_SendBeginNewMatchEvent();
+		EW_SendBeginNewMatchEvent(false);
 	}
 
 	char sPlayerInfo[64];
@@ -890,7 +933,13 @@ void CEWHandler::LoadConfig(const char* sFilePath)
 		return;
 	}
 
-	ordered_json jsonItems = ordered_json::parse(jsoncFile, nullptr, true, true);
+	ordered_json jsonItems = ordered_json::parse(jsoncFile, nullptr, false, true);
+	if (jsonItems.is_discarded())
+	{
+		Panic("Error parsing EntWatch json!!!\n");
+		return;
+	}
+
 	for (auto& [szItemName, jsonItemData] : jsonItems.items())
 	{
 		if (!jsonItemData.contains("hammerid"))
@@ -964,7 +1013,7 @@ void CEWHandler::PrintLoadedConfig(CPlayerSlot slot)
 				ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "              Mode:  %d", (int)item->vecHandlers[j]->mode);
 				ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "          Hammerid:  %s", item->vecHandlers[j]->szHammerid.c_str());
 				ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "             Event:  %s", item->vecHandlers[j]->szOutput.c_str());
-				ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "          Cooldown:  %d", item->vecHandlers[j]->iCooldown);
+				ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "          Cooldown:  %.1f", item->vecHandlers[j]->flCooldown);
 				ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "          Max Uses:  %d", item->vecHandlers[j]->iMaxUses);
 				ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "           Message:  %s", item->vecHandlers[j]->bShowUse ? "True" : "False");
 				ClientPrint(player, HUD_PRINTCONSOLE, EW_PREFIX "          --------- --------- ---------");
@@ -991,6 +1040,7 @@ void CEWHandler::PrintLoadedConfig(CPlayerSlot slot)
 
 void CEWHandler::ClearItems()
 {
+	mapTransfers.clear();
 	vecItems.clear();
 }
 
@@ -1027,7 +1077,7 @@ int CEWHandler::FindItemInstanceByOwner(int iOwnerSlot, bool bOnlyTransferrable,
 	return -1;
 }
 
-int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransferrable, int iStartItem)
+int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransferrable, bool bExact, int iStartItem)
 {
 	std::string lowercaseInput = "";
 	for (char ch : sItemName) {
@@ -1049,8 +1099,16 @@ int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransfer
 			itemname += std::tolower(ch);
 		}
 
-		if (itemname == lowercaseInput)
-			return i;
+		if (bExact)
+		{
+			if (itemname == lowercaseInput)
+				return i;
+		}
+		else
+		{
+			if (itemname.find(lowercaseInput) != std::string::npos)
+				return i;
+		}
 
 		// long name
 		itemname = "";
@@ -1058,8 +1116,16 @@ int CEWHandler::FindItemInstanceByName(std::string sItemName, bool bOnlyTransfer
 			itemname += std::tolower(ch);
 		}
 
-		if (itemname == lowercaseInput)
-			return i;
+		if (bExact)
+		{
+			if (itemname == lowercaseInput)
+				return i;
+		}
+		else
+		{
+			if (itemname.find(lowercaseInput) != std::string::npos)
+				return i;
+		}
 	}
 	return -1;
 }
@@ -1235,7 +1301,7 @@ void CEWHandler::ResetAllClantags()
 		pController->m_szClan("");
 	}
 
-	EW_SendBeginNewMatchEvent();
+	EW_SendBeginNewMatchEvent(true);
 }
 
 bool CEWHandler::RegisterItem(CBasePlayerWeapon* pWeapon)
@@ -1249,7 +1315,7 @@ bool CEWHandler::RegisterItem(CBasePlayerWeapon* pWeapon)
 
 	std::shared_ptr<EWItem> item = i->second;
 
-	Message("Registering item %s (item instance:%d)\n", item->szItemName, vecItems.size() + 1);
+	Message("Registering item %s (item instance:%d)\n", item->szItemName.c_str(), vecItems.size() + 1);
 
 	std::shared_ptr<EWItemInstance> instance = std::make_shared<EWItemInstance>(pWeapon->entindex(), item);
 
@@ -1379,13 +1445,150 @@ void CEWHandler::PlayerDrop(EWDropReason reason, int iItemInstance, CCSPlayerCon
 	}
 }
 
+void CEWHandler::Transfer(CCSPlayerController* pCaller, int iItemInstance, CHandle<CCSPlayerController> hReceiver)
+{
+	CCSPlayerController* pReceiver = hReceiver.Get();
+	if (!pReceiver)
+	{
+		ClientPrint(pCaller, HUD_PRINTTALK, EW_PREFIX "Receiver is no longer valid.");
+		return;
+	}
+	CCSPlayerPawn* pReceiverPawn = pReceiver->GetPlayerPawn();
+	if (!pReceiverPawn || !pReceiverPawn->m_pWeaponServices)
+	{
+		ClientPrint(pCaller, HUD_PRINTTALK, EW_PREFIX "Receiver is no longer valid.");
+		return;
+	}
+
+	if (iItemInstance < 0 || iItemInstance >= vecItems.size() || !vecItems[iItemInstance] || vecItems[iItemInstance]->iWeaponEnt == -1)
+	{
+		ClientPrint(pCaller, HUD_PRINTTALK, EW_PREFIX "Item is no longer valid.");
+		return;
+	}
+
+	CBasePlayerWeapon* pItemWeapon = (CBasePlayerWeapon*)g_pEntitySystem->GetEntityInstance((CEntityIndex)vecItems[iItemInstance]->iWeaponEnt);
+	if (!pItemWeapon)
+	{
+		ClientPrint(pCaller, HUD_PRINTTALK, EW_PREFIX "There was an error while transferring.");
+		return;
+	}
+	gear_slot_t itemSlot = pItemWeapon->GetWeaponVData()->m_GearSlot();
+
+	CCSPlayerController* pOwner = nullptr;
+
+	// Gotta make current owner drop the weapon
+	if (vecItems[iItemInstance]->iOwnerSlot != -1)
+	{
+		pOwner = CCSPlayerController::FromSlot(CPlayerSlot(vecItems[iItemInstance]->iOwnerSlot));
+		if (!pOwner)
+		{
+			ClientPrint(pCaller, HUD_PRINTTALK, EW_PREFIX "There was an error while transferring.");
+			return;
+		}
+
+		CCSPlayerPawn* pOwnerPawn = pOwner->GetPlayerPawn();
+		if (!pOwnerPawn || !pOwnerPawn->m_pWeaponServices)
+		{
+			ClientPrint(pCaller, HUD_PRINTTALK, EW_PREFIX "There was an error while transferring.");
+			return;
+		}
+		
+		CUtlVector<CHandle<CBasePlayerWeapon>>* weapons = pOwnerPawn->m_pWeaponServices()->m_hMyWeapons();
+		FOR_EACH_VEC(*weapons, i)
+		{
+			CBasePlayerWeapon* pWeapon = (*weapons)[i].Get();
+
+			if (!pWeapon)
+				continue;
+
+			if (pWeapon->GetWeaponVData()->m_GearSlot() == itemSlot)
+			{
+				pOwnerPawn->m_pWeaponServices()->DropWeapon(pWeapon);
+				break;
+			}
+		}
+	}
+
+	// Make receiver drop the weapon in the item slot
+	CUtlVector<CHandle<CBasePlayerWeapon>>* weapons = pReceiverPawn->m_pWeaponServices()->m_hMyWeapons();
+	FOR_EACH_VEC(*weapons, i)
+	{
+		CBasePlayerWeapon* pWeapon = (*weapons)[i].Get();
+
+		if (!pWeapon)
+			continue;
+
+		if (pWeapon->GetWeaponVData()->m_GearSlot() == itemSlot)
+		{
+			pReceiverPawn->m_pWeaponServices()->DropWeapon(pWeapon);
+			break;
+		}
+	}
+
+	// Give the item to the receiver
+	Vector vecOrigin = pReceiverPawn->GetAbsOrigin();
+	pItemWeapon->Teleport(&vecOrigin, nullptr, nullptr);
+
+	const char* pszCommandPlayerName = pCaller ? pCaller->GetPlayerName() : "Console";
+
+	ZEPlayer* pZEReceiver = g_playerManager->GetPlayer(pReceiver->GetPlayerSlot());
+	char sReceiverInfo[64];
+	if (pZEReceiver->IsFakeClient())
+		V_snprintf(sReceiverInfo, sizeof(sReceiverInfo), "%s [BOT]", pReceiver->GetPlayerName());
+	else
+		V_snprintf(sReceiverInfo, sizeof(sReceiverInfo), "%s [%llu]", pReceiver->GetPlayerName(), pZEReceiver->GetUnauthenticatedSteamId64());
+
+	if (pOwner)
+	{
+		ZEPlayer* pZEOwner = g_playerManager->GetPlayer(pOwner->GetPlayerSlot());
+		char sOwnerInfo[64];
+		if (pZEOwner->IsFakeClient())
+			V_snprintf(sOwnerInfo, sizeof(sOwnerInfo), "%s [BOT]", pOwner->GetPlayerName());
+		else
+			V_snprintf(sOwnerInfo, sizeof(sOwnerInfo), "%s [%llu]", pOwner->GetPlayerName(), pZEOwner->GetUnauthenticatedSteamId64());
+
+		Message("[EntWatch] %s transferred %s from %s to %s\n",
+				pszCommandPlayerName,
+				g_pEWHandler->vecItems[iItemInstance]->szItemName.c_str(),
+				sOwnerInfo,
+				sReceiverInfo);
+
+		ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "Admin\x02 %s\x01 has transferred%s %s\x01 from\x02 %s\x01 to\x02 %s\x01.",
+					   pszCommandPlayerName,
+					   g_pEWHandler->vecItems[iItemInstance]->sChatColor,
+					   g_pEWHandler->vecItems[iItemInstance]->szItemName.c_str(),
+					   pOwner->GetPlayerName(),
+					   pReceiver->GetPlayerName());
+	}
+	else
+	{
+		Message("[EntWatch] %s transferred %s to %s\n",
+				pszCommandPlayerName,
+				g_pEWHandler->vecItems[iItemInstance]->szItemName.c_str(),
+				sReceiverInfo);
+
+		ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "Admin\x02 %s\x01 has transferred%s %s\x01 to\x02 %s\x01.",
+					   pszCommandPlayerName,
+					   g_pEWHandler->vecItems[iItemInstance]->sChatColor,
+					   g_pEWHandler->vecItems[iItemInstance]->szItemName.c_str(),
+					   pReceiver->GetPlayerName());
+	}
+}
+
+
 void CEWHandler::AddUseHook(CBaseEntity* pEnt)
 {
 	if (vecUseHookedEntities.size() <= 0)
 	{
+		const auto pCBaseEntity_VTable = modules::server->FindVirtualTable("CBaseEntity");
 		static int offset = g_GameConfig->GetOffset("CBaseEntity::Use");
+		if (offset == -1)
+		{
+			Panic("Failed to find CBaseEntity::Use offset in entwatch.cpp::AddUseHook() !!\n");
+			return;
+		}
 		SH_MANUALHOOK_RECONFIGURE(CBaseEntity_Use, offset, 0, 0);
-		iUseHookId = SH_ADD_MANUALVPHOOK(CBaseEntity_Use, pEnt, SH_MEMBER(this, &CEWHandler::Hook_Use), false);
+		iUseHookId = SH_ADD_MANUALDVPHOOK(CBaseEntity_Use, pCBaseEntity_VTable, SH_MEMBER(this, &CEWHandler::Hook_Use), false);
 	}
 
 	vecUseHookedEntities.push_back(pEnt->GetHandle());
@@ -1659,7 +1862,7 @@ bool EW_Detour_CCSPlayer_WeaponServices_CanUse(CCSPlayer_WeaponServices* pWeapon
 	if (!g_pEWHandler || !g_pEWHandler->bConfigLoaded)
 		return true;
 
-	CCSPlayerPawn* pPawn = pWeaponServices->__m_pChainEntity();
+	CCSPlayerPawn* pPawn = pWeaponServices->GetPawn();
 	if (!pPawn)
 		return true;
 
@@ -1679,7 +1882,7 @@ void EW_Detour_CCSPlayer_WeaponServices_EquipWeapon(CCSPlayer_WeaponServices* pW
 	if (!g_pEWHandler || !g_pEWHandler->bConfigLoaded)
 		return;
 
-	CCSPlayerPawn* pPawn = pWeaponServices->__m_pChainEntity();
+	CCSPlayerPawn* pPawn = pWeaponServices->GetPawn();
 	if (!pPawn)
 		return;
 
@@ -1699,7 +1902,7 @@ void EW_DropWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon*
 	if (!g_pEWHandler || !g_pEWHandler->bConfigLoaded)
 		return;
 
-	CCSPlayerPawn* pPawn = pWeaponServices->__m_pChainEntity();
+	CCSPlayerPawn* pPawn = pWeaponServices->GetPawn();
 	if (!pPawn)
 		return;
 
@@ -1767,6 +1970,12 @@ void EW_PlayerDeathPre(CCSPlayerController* pController)
 
 void EW_PlayerDisconnect(int slot)
 {
+	auto i = g_pEWHandler->mapTransfers.find(slot);
+	if (i != g_pEWHandler->mapTransfers.end())
+	{
+		g_pEWHandler->mapTransfers.erase(slot);
+	}
+
 	g_pEWHandler->m_bEbanned[slot] = false;
 
 	CCSPlayerController* pController = CCSPlayerController::FromSlot(slot);
@@ -1777,7 +1986,7 @@ void EW_PlayerDisconnect(int slot)
 	g_pEWHandler->PlayerDrop(EWDropReason::Disconnect, -1, pController);
 }
 
-void EW_SendBeginNewMatchEvent()
+void EW_SendBeginNewMatchEvent(bool bForce)
 {
 	IGameEvent* pEvent = g_gameEventManager->CreateEvent("begin_new_match");
 	if (!pEvent)
@@ -1796,7 +2005,21 @@ void EW_SendBeginNewMatchEvent()
 	g_gameEventManager->SerializeEvent(pEvent, data);
 
 	CRecipientFilter filter;
-	filter.AddAllPlayers();
+	if (bForce)
+		filter.AddAllPlayers();
+	else
+	{
+		for (int i = 0; i < gpGlobals->maxClients; i++)
+		{
+			ZEPlayer* pPlayer = g_playerManager->GetPlayer(i);
+
+			if (!pPlayer || pPlayer->IsFakeClient() || !pPlayer->IsAuthenticated())
+				continue;
+
+			if (pPlayer->GetEntwatchClangtags())
+				filter.AddRecipient(pPlayer->GetPlayerSlot());
+		}
+	}
 	g_gameEventSystem->PostEventAbstract(-1, false, &filter, pMsg, data, 0);
 	delete data;
 }
@@ -1826,6 +2049,7 @@ void EW_FireOutput(const CEntityIOOutput* pThis, CEntityInstance* pActivator, CE
 			if (pCaller->GetEntityIndex().Get() != handler->iEntIndex)
 				continue;
 
+			Message("item(%d) handler(%d) ent had an output: %s fire\n",i,j, pThis->m_pDesc->m_pName);
 			if (V_stricmp(pThis->m_pDesc->m_pName, handler->szOutput.c_str()))
 				continue;
 
@@ -1981,34 +2205,46 @@ CON_COMMAND_CHAT_FLAGS(etransfer, "Transfer an EntWatch item", ADMFLAG_GENERIC)
 		return;
 	}
 
+	const char* pszCommandPlayerName = player ? player->GetPlayerName() : "Console";
+
+	bool bHasOngoing = false;
+	auto ongoingTransfer = g_pEWHandler->mapTransfers.find(player->GetPlayerSlot());
+	if (ongoingTransfer != g_pEWHandler->mapTransfers.end())
+	{
+		bHasOngoing = true;
+		Message("Ongoing transfer found...\n");
+		std::shared_ptr<ETransferInfo> transferInfo = ongoingTransfer->second;
+		if (gpGlobals->curtime - transferInfo->flTime > 60.0)
+		{
+			// Transfer was not been completed within 60 seconds, cancel automatically
+			g_pEWHandler->mapTransfers.erase(player->GetPlayerSlot());
+			bHasOngoing = false;
+		}
+		else
+		{
+			// A transfer was previously started, check if they entered a number
+			if (args.ArgC() == 2)
+			{
+				int id = Q_atoi(args[1]);
+				if (id <= 0 || id > transferInfo->itemIds.size())
+				{
+					ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Number must be between 1 and %s, try again", transferInfo->itemIds.size());
+					return;
+				}
+				else
+				{
+					// Valid number, try and do the transfer
+					g_pEWHandler->Transfer(player, transferInfo->itemIds[id], transferInfo->hReceiver);
+					return;
+				}
+			}
+		}
+	}
+
 	if (args.ArgC() < 3)
 	{
 		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Usage: !etransfer <owner>/$<itemname> <receiver>");
 		return;
-	}
-
-	const char* pszCommandPlayerName = player ? player->GetPlayerName() : "Console";
-
-	int iItemInstance = -1;
-	bool bTransferFromPlayer = true;
-
-	if (args[1][0] == '$')
-	{
-		char sItemName[64];
-
-		bTransferFromPlayer = false;
-		V_strcpy(sItemName, args[1] + 1);
-		iItemInstance = g_pEWHandler->FindItemInstanceByName(sItemName, true);
-
-		if (iItemInstance == -1)
-		{
-			ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Could not find an item with the name:\x04 %s", sItemName);
-			return;
-		}
-		if (g_pEWHandler->vecItems[iItemInstance]->iOwnerSlot != -1)
-		{
-			bTransferFromPlayer = true;
-		}
 	}
 
 	int iNumClients = 0;
@@ -2027,6 +2263,7 @@ CON_COMMAND_CHAT_FLAGS(etransfer, "Transfer an EntWatch item", ADMFLAG_GENERIC)
 		return;
 	}
 
+	// TODO: infraction update
 	if (g_pEWHandler->m_bEbanned[pSlots[0]])
 	{
 		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Specified receiver is ebanned.");
@@ -2035,162 +2272,164 @@ CON_COMMAND_CHAT_FLAGS(etransfer, "Transfer an EntWatch item", ADMFLAG_GENERIC)
 
 	CCSPlayerController* pReceiver = CCSPlayerController::FromSlot(pSlots[0]);
 	if (!pReceiver)
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Error getting receiver.");
 		return;
+	}
+
 	CCSPlayerPawn* pReceiverPawn = pReceiver->GetPlayerPawn();
 	if (!pReceiverPawn || !pReceiverPawn->m_pWeaponServices)
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Error getting receiver.");
 		return;
+	}
+	// Receiver found
+
+	// Transfer by item name
+	if (args[1][0] == '$')
+	{
+		// double $ for EXACT name matching
+		bool bExact = false;
+		if (strlen(args[1]) > 1)
+			bExact = (args[1][1] == '$');
+
+		char sItemName[64];
+		if (bExact)
+			V_strncpy(sItemName, args[1] + 2, sizeof(sItemName));
+		else
+			V_strncpy(sItemName, args[1] + 1, sizeof(sItemName));
+
+		std::vector<int> itemIds;
+		int itemCount = 0;
+		int iItemInstance = g_pEWHandler->FindItemInstanceByName(sItemName, true, bExact, 0);
+
+		while (iItemInstance != -1)
+		{
+			itemCount++;
+			itemIds.push_back(iItemInstance);
+			iItemInstance = g_pEWHandler->FindItemInstanceByName(sItemName, true, bExact, iItemInstance + 1);
+		}
+
+		if (itemCount == 0)
+		{
+			if (bExact)
+				ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Could not find an item with the exact name:\x04 %s", sItemName);
+			else
+				ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Could not find an item with the name:\x04 %s", sItemName);
+			return;
+		}
+		else if (itemCount == 1)
+		{
+			g_pEWHandler->Transfer(player, itemIds[0], pReceiver->GetHandle());
+			return;
+		}
+
+		// itemCount > 1
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Found %d items matching\x04 \"%s\"", itemCount, sItemName);
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Enter\x02 !etransfer <number>\x01 to complete the transfer");
+
+		std::shared_ptr<ETransferInfo> transferInfo = std::make_shared<ETransferInfo>(pReceiver->GetHandle());
+
+		for (int i = 0; i < itemIds.size(); i++)
+		{
+			std::shared_ptr<EWItemInstance> pItem = g_pEWHandler->vecItems[itemIds[i]];
+			std::string sItemText = pItem->GetHandlerStateText();
+			std::string sOwnerInfo = "\x08(No owners)";
+			if (pItem->iOwnerSlot != -1)
+			{
+				CCSPlayerController* pOwner = CCSPlayerController::FromSlot(CPlayerSlot(pItem->iOwnerSlot));
+				if (!pOwner)
+					sOwnerInfo = std::format("\x05(Owner:\x02 ERROR\x05)");
+				else
+					sOwnerInfo = std::format("\x05(Owner: {})", pOwner->GetPlayerName());
+			}
+			else if (pItem->sLastOwnerName != "")
+				sOwnerInfo = std::format("\x10(Previous owner: {})", pItem->sLastOwnerName.c_str());
+
+			ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "\x0E%d.\x01 %s [%s] %s", i + 1, pItem->szItemName.c_str(), sItemText.c_str(), sOwnerInfo.c_str());
+
+			transferInfo->itemIds.push_back(itemIds[i]);
+		}
+
+		if (bHasOngoing)
+			g_pEWHandler->mapTransfers.erase(player->GetPlayerSlot());
+
+		g_pEWHandler->mapTransfers[player->GetPlayerSlot()] = transferInfo;
+		return;
+	}
 
 	// Player to player transfer
-	if (bTransferFromPlayer)
+	iNumClients = 0;
+
+	// Find owner
+	if (!g_playerManager->CanTargetPlayers(player, args[1], iNumClients, pSlots, NO_MULTIPLE | NO_SPECTATOR | NO_DEAD))
 	{
-		iNumClients = 0;
-		CCSPlayerController* pOwner;
-		if (iItemInstance == -1)
-		{
-			if (!g_playerManager->CanTargetPlayers(player, args[2], iNumClients, pSlots, NO_MULTIPLE | NO_SPECTATOR | NO_DEAD))
-			{
-				return;
-			}
-			if (!iNumClients)
-			{
-				ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Item owner not found.");
-				return;
-			}
-			pOwner = CCSPlayerController::FromSlot(pSlots[0]);
-		}
-		else
-		{
-			pOwner = CCSPlayerController::FromSlot(CPlayerSlot(g_pEWHandler->vecItems[iItemInstance]->iOwnerSlot));
-		}
+		// CanTargetPlayers prints error string if false
+		return;
+	}
+	if (!iNumClients)
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Item owner not found.");
+		return;
+	}
+	CCSPlayerController* pOwner = CCSPlayerController::FromSlot(pSlots[0]);
 
-		if (!pOwner)
-			return;
-		CCSPlayerPawn* pOwnerPawn = pOwner->GetPlayerPawn();
-		if (!pOwnerPawn || !pOwnerPawn->m_pWeaponServices)
-			return;
+	if (!pOwner)
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Error getting item owner.");
+		return;
+	}
+	CCSPlayerPawn* pOwnerPawn = pOwner->GetPlayerPawn();
+	if (!pOwnerPawn || !pOwnerPawn->m_pWeaponServices)
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Error getting item owner.");
+		return;
+	}
+	// Owner found
 
-		if (iItemInstance == -1)
-		{
-			iItemInstance = g_pEWHandler->FindItemInstanceByOwner(pOwner->GetPlayerSlot(), true, 0);
-			if (iItemInstance == -1)
-			{
-				ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "%s does not have an item that can be transferred.", pOwner->GetPlayerName());
-				return;
-			}
-		}
+	std::vector<int> itemIds;
+	int itemCount = 0;
+	int iItemInstance = g_pEWHandler->FindItemInstanceByOwner(pOwner->GetPlayerSlot(), true, 0);
 
-		// TODO: null check but also fix it in ew_onweapondeleted
-		CBasePlayerWeapon* pItemWeapon = (CBasePlayerWeapon*)g_pEntitySystem->GetEntityInstance((CEntityIndex)g_pEWHandler->vecItems[iItemInstance]->iWeaponEnt);
+	while (iItemInstance != -1)
+	{
+		itemCount++;
+		itemIds.push_back(iItemInstance);
+		iItemInstance = g_pEWHandler->FindItemInstanceByOwner(pOwner->GetPlayerSlot(), true, iItemInstance + 1);
+	}
 
-		gear_slot_t itemSlot = pItemWeapon->GetWeaponVData()->m_GearSlot();
-
-		// Make current item owner drop the item weapon
-		CUtlVector<CHandle<CBasePlayerWeapon>>* weapons = pOwnerPawn->m_pWeaponServices()->m_hMyWeapons();
-		FOR_EACH_VEC(*weapons, i)
-		{
-			CBasePlayerWeapon* pWeapon = (*weapons)[i].Get();
-
-			if (!pWeapon)
-				continue;
-
-			if (pWeapon->GetWeaponVData()->m_GearSlot() == itemSlot)
-			{
-				pOwnerPawn->m_pWeaponServices()->DropWeapon(pWeapon);
-				break;
-			}
-		}
-
-		// Make receiver drop the weapon in the item slot
-		weapons = pReceiverPawn->m_pWeaponServices()->m_hMyWeapons();
-		FOR_EACH_VEC(*weapons, i)
-		{
-			CBasePlayerWeapon* pWeapon = (*weapons)[i].Get();
-
-			if (!pWeapon)
-				continue;
-
-			if (pWeapon->GetWeaponVData()->m_GearSlot() == itemSlot)
-			{
-				pReceiverPawn->m_pWeaponServices()->DropWeapon(pWeapon);
-				break;
-			}
-		}
-
-		// Give the item to the receiver
-		Vector vecOrigin = pReceiverPawn->GetAbsOrigin();
-		pItemWeapon->Teleport(&vecOrigin, nullptr, nullptr);
-
-		ZEPlayer* pZEOwner = g_playerManager->GetPlayer(pOwner->GetPlayerSlot());
-		char sOwnerInfo[64];
-		if (pZEOwner->IsFakeClient())
-			V_snprintf(sOwnerInfo, sizeof(sOwnerInfo), "%s [BOT]", pOwner->GetPlayerName());
-		else
-			V_snprintf(sOwnerInfo, sizeof(sOwnerInfo), "%s [%llu]", pOwner->GetPlayerName(), pZEOwner->GetUnauthenticatedSteamId64());
-
-		ZEPlayer* pZEReceiver = g_playerManager->GetPlayer(pReceiver->GetPlayerSlot());
-		char sReceiverInfo[64];
-		if (pZEReceiver->IsFakeClient())
-			V_snprintf(sReceiverInfo, sizeof(sReceiverInfo), "%s [BOT]", pReceiver->GetPlayerName());
-		else
-			V_snprintf(sReceiverInfo, sizeof(sReceiverInfo), "%s [%llu]", pReceiver->GetPlayerName(), pZEReceiver->GetUnauthenticatedSteamId64());
-
-		Message("[EntWatch] %s transferred %s from %s to %s\n",
-			pszCommandPlayerName,
-			g_pEWHandler->vecItems[iItemInstance]->szItemName.c_str(),
-			sOwnerInfo,
-			sReceiverInfo);
-
-		ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "Admin\x02 %s\x01 has transferred%s %s\x01 from\x02 %s\x01 to\x02 %s\x01.",
-			pszCommandPlayerName,
-			g_pEWHandler->vecItems[iItemInstance]->sChatColor,
-			g_pEWHandler->vecItems[iItemInstance]->szItemName.c_str(),
-			pOwner->GetPlayerName(),
-			pReceiver->GetPlayerName());
+	if (itemCount == 0)
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "%s does not have an item that can be transferred.", pOwner->GetPlayerName());
+		return;
+	}
+	else if (itemCount == 1)
+	{
+		g_pEWHandler->Transfer(player, itemIds[0], pReceiver->GetHandle());
 		return;
 	}
 
-	// Dropped weapon to player transfer 
+	// itemCount > 1
+	ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Found %d items owned by\x04 \"%s\"", itemCount, pOwner->GetPlayerName());
+	ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Enter\x02 !etransfer <number>\x01 to complete the transfer");
 
-	CBasePlayerWeapon* pItemWeapon = (CBasePlayerWeapon*)g_pEntitySystem->GetEntityInstance((CEntityIndex)g_pEWHandler->vecItems[iItemInstance]->iWeaponEnt);
-	gear_slot_t itemSlot = pItemWeapon->GetWeaponVData()->m_GearSlot();
+	std::shared_ptr<ETransferInfo> transferInfo = std::make_shared<ETransferInfo>(pReceiver->GetHandle());
 
-	// Make receiver drop weapon in item slot
-	CUtlVector<CHandle<CBasePlayerWeapon>>* weapons = pReceiverPawn->m_pWeaponServices()->m_hMyWeapons();
-	FOR_EACH_VEC(*weapons, i)
+	for (int i = 0; i < itemIds.size(); i++)
 	{
-		CBasePlayerWeapon* pWeapon = (*weapons)[i].Get();
+		std::shared_ptr<EWItemInstance> pItem = g_pEWHandler->vecItems[itemIds[i]];
+		std::string sItemText = pItem->GetHandlerStateText();
+		std::string sOwnerInfo = std::format("\x05(Owner: {})", pOwner->GetPlayerName());
 
-		if (!pWeapon)
-			continue;
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "\x0E%d.\x01 %s [%s] %s", i + 1, pItem->szItemName.c_str(), sItemText.c_str(), sOwnerInfo.c_str());
 
-		if (pWeapon->GetWeaponVData()->m_GearSlot() == itemSlot)
-		{
-			pReceiverPawn->m_pWeaponServices()->DropWeapon(pWeapon);
-			break;
-		}
+		transferInfo->itemIds.push_back(itemIds[i]);
 	}
 
-	// Give the item to the receiver
-	Vector vecOrigin = pReceiverPawn->GetAbsOrigin();
-	pItemWeapon->Teleport(&vecOrigin, nullptr, nullptr);
+	if (bHasOngoing)
+		g_pEWHandler->mapTransfers.erase(player->GetPlayerSlot());
 
-	ZEPlayer* pZEReceiver = g_playerManager->GetPlayer(pReceiver->GetPlayerSlot());
-	char sReceiverInfo[64];
-	if (pZEReceiver->IsFakeClient())
-		V_snprintf(sReceiverInfo, sizeof(sReceiverInfo), "%s [BOT]", pReceiver->GetPlayerName());
-	else
-		V_snprintf(sReceiverInfo, sizeof(sReceiverInfo), "%s [%llu]", pReceiver->GetPlayerName(), pZEReceiver->GetUnauthenticatedSteamId64());
-
-	Message("[EntWatch] %s transferred %s to %s\n",
-		pszCommandPlayerName,
-		g_pEWHandler->vecItems[iItemInstance]->szItemName.c_str(),
-		sReceiverInfo);
-
-	ClientPrintAll(HUD_PRINTTALK, EW_PREFIX "Admin\x02 %s\x01 has transferred%s %s\x01 to\x02 %s\x01.",
-		pszCommandPlayerName,
-		g_pEWHandler->vecItems[iItemInstance]->sChatColor,
-		g_pEWHandler->vecItems[iItemInstance]->szItemName.c_str(),
-		pReceiver->GetPlayerName());
+	g_pEWHandler->mapTransfers[player->GetPlayerSlot()] = transferInfo;
 }
 
 CON_COMMAND_CHAT(ew_dump, "Prints the currently loaded config to console")
@@ -2205,6 +2444,38 @@ CON_COMMAND_CHAT(ew_dump, "Prints the currently loaded config to console")
 	}
 
 	g_pEWHandler->PrintLoadedConfig(player->GetPlayerSlot());
+}
+
+CON_COMMAND_CHAT(etag, "Toggle EntWatch clantags on the scoreboard")
+{
+	if (!g_bEnableEntWatch)
+		return;
+
+	if (!player)
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Only usable in game.");
+		return;
+	}
+
+	ZEPlayer* zpPlayer = g_playerManager->GetPlayer(player->GetPlayerSlot());
+	if (!zpPlayer)
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "Something went wrong, try again later.");
+		return;
+	}
+
+	bool bCurrentStatus = zpPlayer->GetEntwatchClangtags();
+	bCurrentStatus = !bCurrentStatus;
+	zpPlayer->SetEntwatchClangtags(bCurrentStatus);
+
+	if (bCurrentStatus)
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "You have\x04 Enabled\x01 EntWatch clantag updates");
+	}
+	else
+	{
+		ClientPrint(player, HUD_PRINTTALK, EW_PREFIX "You have\x07 Disabled\x01 EntWatch clantag updates");
+	}
 }
 
 CON_COMMAND_CHAT(hud, "Toggle EntWatch HUD")

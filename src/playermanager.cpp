@@ -551,13 +551,6 @@ int ZEPlayer::GetButtonWatchMode()
 	return g_pUserPreferencesSystem->GetPreferenceInt(m_slot.Get(), BUTTON_WATCH_PREF_KEY_NAME, m_iButtonWatchMode);
 }
 
-int ZEPlayer::GetEntwatchHudMode()
-{
-	if (IsFakeClient())
-		return 0;
-	return g_pUserPreferencesSystem->GetPreferenceInt(m_slot.Get(), EW_HUD_PREF_KEY_NAME, m_iEntwatchHudMode);
-}
-
 void ZEPlayer::SetSteamIdAttribute()
 {
 	if (!g_bEnableMapSteamIds)
@@ -594,9 +587,6 @@ void ZEPlayer::ReplicateConVar(const char* pszName, const char* pszValue)
 	delete data;
 }
 
-float flEwHudDistance = 13.0f;
-FAKE_FLOAT_CVAR(ewhuddist, "distance of ew hud", flEwHudDistance, 13.0f, false);
-
 CON_COMMAND_CHAT(ewhud, "remake the ew hud")
 {
 	if (!player)
@@ -614,8 +604,49 @@ CON_COMMAND_CHAT(ewhud, "remake the ew hud")
 	zpPlayer->CreateEntwatchHud();
 }
 
+int ZEPlayer::GetEntwatchHudMode()
+{
+	if (IsFakeClient())
+		return 0;
+	return m_iEntwatchHudMode;
+}
+
+CBaseViewModel* ZEPlayer::GetOrCreateCustomViewModel()
+{
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(GetPlayerSlot());
+	if (!pController)
+		return nullptr;
+
+	CCSPlayerPawn* pPawn = pController->GetPlayerPawn();
+	if (!pPawn)
+		return nullptr;
+
+	if (!pPawn->m_pViewModelServices())
+		return nullptr;
+
+	CBaseViewModel* pViewmodel = pPawn->m_pViewModelServices()->GetViewModel(2);
+	if (pViewmodel)
+		return pViewmodel;
+
+	pViewmodel = CreateEntityByName<CBaseViewModel>("predicted_viewmodel");
+	if (!pViewmodel)
+		return nullptr;
+
+	pViewmodel->DispatchSpawn();
+	pViewmodel->SetOwner(pPawn);
+	pPawn->m_pViewModelServices()->SetViewModel(2, pViewmodel);
+	pPawn->NetworkStateChanged();
+}
+
 void ZEPlayer::CreateEntwatchHud()
 {
+	CBaseViewModel* pViewModel = GetOrCreateCustomViewModel();
+	if (!pViewModel)
+	{
+		Panic("Failed to get or create custom viewmodel for entwatch hud.\n");
+		return;
+	}
+
 	CPointWorldText* pText = GetEntwatchHud();
 	if (pText)
 	{
@@ -626,74 +657,77 @@ void ZEPlayer::CreateEntwatchHud()
 	pText = CreateEntityByName<CPointWorldText>("point_worldtext");
 	pText->m_bEnabled(true);
 	pText->m_bFullbright(true);
-	pText->m_flFontSize(56.0f);
+	pText->m_flFontSize(30.0f);
 	int a = m_colorEntwatchHud.a();
 	if (a == 255)
 		a = 254; // 254 allows it to be visible through some items
 	pText->m_Color->SetColor(m_colorEntwatchHud.r(), m_colorEntwatchHud.g(), m_colorEntwatchHud.b(), a);
 	pText->m_flWorldUnitsPerPx(0.01f);
+	pText->m_nJustifyVertical(PointWorldTextJustifyVertical_t::POINT_WORLD_TEXT_JUSTIFY_VERTICAL_TOP);
 
 	V_strncpy(pText->m_FontName, "Consolas", 64);
 	
 	pText->SetMessage("");
 
-	CCSPlayerPawn* pPawn = (CCSPlayerPawn*)CCSPlayerController::FromSlot(GetPlayerSlot())->GetPawn();
-	if (!pPawn)
-		return;
-	Vector origin = pPawn->GetAbsOrigin();
-	QAngle angles = pPawn->GetAbsRotation(); // Using eyeangles can make parenting have inconsitent offsets
+	pText->DispatchSpawn();
+	SetEntwatchHud(pText);
+
+	pText->AcceptInput("SetParent", "!activator", pViewModel);
+
 	
-	// Only get direction vectors of yaw (parenting to viewmodel only needs this)
-	angles.x = 0.0;
-	angles.z = 0.0;
+	Vector origin = pViewModel->GetAbsOrigin();
+	QAngle vmangles = pViewModel->GetAbsRotation();
+	
 	Vector forward;
 	Vector right;
-	Vector up; //unused
-	AngleVectors(angles, &forward, &right, &up);
-
-	// Distance in front
-	origin.x += forward.x * flEwHudDistance;
-	origin.y += forward.y * flEwHudDistance;
-
-	// Left / Right offset (+x to move right, -x to move left)
-	origin.x += right.x * m_flEntwatchHudX;
-	origin.y += right.y * m_flEntwatchHudX;
-
-	// Up / Down offset (+y to move down, -y to move up)
-	origin.z -= m_flEntwatchHudY;
+	Vector up;
+	AngleVectors(vmangles, &forward, &right, &up);
 	
-	// Rotate text (keeping yaw)
-	angles.z = 90.0f;
-	angles.y = angles.y - 90.0f;
-	angles.x = 0.0f;
+	origin += (forward * 7.0f);
+	
+	// -x = move left,  +x = move right
+	origin += (right * GetEntwatchHudX());
+	
+	// -y = move up,   +y = move down
+	origin -= (up * GetEntwatchHudY());
+
+	// TODO: make this better, its good enough but for < 0 the curve isnt quite right
+	float diff = 0.0;
+	if (vmangles.x < 0.0)
+	{
+		diff = sin(DEG2RAD((vmangles.x * 2)) - (M_PI_F / 2)) + 2;
+	}
+	else
+	{
+		diff = cos(DEG2RAD(vmangles.x)) - sin(DEG2RAD(vmangles.x));
+	}
+
+	QAngle angles;
+	angles.x = vmangles.z;
+	angles.y = vmangles.y - 90.0f;
+	angles.z = vmangles.x + (diff * 90.0f);
 
 	pText->Teleport(&origin, &angles, nullptr);
-	pText->DispatchSpawn();
-	
-	// Find viewmodel
-	CCSGOViewModel* pViewmodel = nullptr;
-	while ((pViewmodel = reinterpret_cast<CCSGOViewModel*>(UTIL_FindEntityByClassname(pViewmodel, "csgo_viewmodel"))) != nullptr)
-	{
-		if (pViewmodel->m_hOwnerEntity->entindex() == pPawn->entindex())
-		{
-			pText->SetParent(pViewmodel);
-			break;
-		}
-	}
-	
-	SetEntwatchHud(pText);
 }
 
 void ZEPlayer::SetEntwatchHudMode(int iMode)
 {
 	m_iEntwatchHudMode = iMode;
-	g_pUserPreferencesSystem->SetPreferenceInt(m_slot.Get(), EW_HUD_PREF_KEY_NAME, m_iEntwatchHudMode);
+	g_pUserPreferencesSystem->SetPreferenceInt(m_slot.Get(), EW_PREF_HUD_MODE, m_iEntwatchHudMode);
+}
+
+void ZEPlayer::SetEntwatchClangtags(bool bStatus)
+{
+	m_bEntwatchClantags = bStatus;
+	g_pUserPreferencesSystem->SetPreferenceInt(m_slot.Get(), EW_PREF_CLANTAG, bStatus ? 1 : 0);
 }
 
 void ZEPlayer::SetEntwatchHudColor(Color colorHud)
 {
 	m_colorEntwatchHud = colorHud;
-	
+	std::string strColor = std::to_string(colorHud.r()) + " " + std::to_string(colorHud.g()) + " " + std::to_string(colorHud.b()) + " " + std::to_string(colorHud.a());
+	g_pUserPreferencesSystem->SetPreference(m_slot.Get(), EW_PREF_HUDCOLOR, strColor.c_str());
+
 	CreateEntwatchHud();
 }
 
@@ -701,6 +735,8 @@ void ZEPlayer::SetEntwatchHudPos(float x, float y)
 {
 	m_flEntwatchHudX = x; 
 	m_flEntwatchHudY = y;
+	g_pUserPreferencesSystem->SetPreferenceFloat(m_slot.Get(), EW_PREF_HUDPOS_X, m_flEntwatchHudX);
+	g_pUserPreferencesSystem->SetPreferenceFloat(m_slot.Get(), EW_PREF_HUDPOS_Y, m_flEntwatchHudY);
 	
 	CreateEntwatchHud();
 }

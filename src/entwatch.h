@@ -31,7 +31,14 @@ using ordered_json = nlohmann::ordered_json;
 
 #define EW_PREFIX " \4[EntWatch]\1 "
 
-#define EW_HUD_PREF_KEY_NAME "entwatch_hud"
+#define EW_PREF_HUD_MODE "entwatch_hud"
+#define EW_PREF_CLANTAG "entwatch_clantag"
+#define EW_PREF_HUDPOS_X "entwatch_hudpos_x"
+#define EW_PREF_HUDPOS_Y "entwatch_hudpos_y"
+#define EW_PREF_HUDCOLOR "entwatch_hudcolor"
+
+#define EW_HUDPOS_X_DEFAULT -7.0f
+#define EW_HUDPOS_Y_DEFAULT -2.0f
 
 #define EW_HUD_TICKRATE 0.5f
 
@@ -85,8 +92,10 @@ struct EWItemHandler
 	std::string szName;
 	std::string szHammerid;
 	std::string szOutput;		/* Output name for when this is used e.g. OnPressed */
-	int iCooldown;
+	float flCooldown;
 	int iMaxUses;
+	float flOffset;
+	float flMaxOffset;
 	bool bShowUse;			/* Whether to show when this is used */
 	bool bShowHud;			/* Track this cd/uses on hud/scoreboard */
 	EWAutoConfigOption templated;		/* Is this entity templated (should we check for template suffix) */
@@ -166,6 +175,19 @@ public:
 	std::string GetHandlerStateText();
 };
 
+struct ETransferInfo
+{
+	ETransferInfo(CHandle<CCSPlayerController> hRecv)
+	{
+		hReceiver = hRecv;
+		flTime = gpGlobals->curtime;
+	}
+
+	CHandle<CCSPlayerController> hReceiver; // Player being given the item
+	std::vector<int> itemIds;   // Item IDs that were targetted
+	float flTime;			    // The time when the command was initiated
+};
+
 class CEWHandler
 {
 public:
@@ -197,7 +219,8 @@ public:
 
 	int FindItemInstanceByWeapon(int iWeaponEnt);
 	int FindItemInstanceByOwner(int iOwnerSlot, bool bOnlyTransferrable, int iStartItem);
-	int FindItemInstanceByName(std::string sItemName, bool bOnlyTransferrable, int iStartItem);
+	int FindItemInstanceByName(std::string sItemName, bool bOnlyTransferrable, bool bExact, int iStartItem);
+
 	void RegisterHandler(CBaseEntity* pEnt);
 	bool RegisterTrigger(CBaseEntity* pEnt);
 	void AddTouchHook(CBaseEntity* pEnt);
@@ -211,6 +234,7 @@ public:
 	void RemoveWeaponFromItem(int itemId);
 	void PlayerPickup(CCSPlayerPawn* pPawn, int iItemInstance);
 	void PlayerDrop(EWDropReason reason, int iItemInstance, CCSPlayerController* pController);
+	void Transfer(CCSPlayerController* pCaller, int iItemInstance, CHandle<CCSPlayerController> hReceiver);
 
 	void AddUseHook(CBaseEntity* pEnt);
 	void RemoveUseHook(CBaseEntity* pEnt);
@@ -228,6 +252,8 @@ public:
 	int iUseHookId;
 
 	bool m_bHudTicking;
+
+	std::map<int, std::shared_ptr<ETransferInfo>> mapTransfers; // Any etransfers that target multiple items
 
 	// TODO: Move to player class
 	bool m_bEbanned[MAXPLAYERS + 1];
@@ -247,7 +273,7 @@ void EW_DropWeapon(CCSPlayer_WeaponServices* pWeaponServices, CBasePlayerWeapon*
 void EW_PlayerDeath(IGameEvent* pEvent);
 void EW_PlayerDeathPre(CCSPlayerController* pController);
 void EW_PlayerDisconnect(int slot);
-void EW_SendBeginNewMatchEvent();
+void EW_SendBeginNewMatchEvent(bool bForce);
 bool EW_IsFireOutputHooked();
 void EW_FireOutput(const CEntityIOOutput* pThis, CEntityInstance* pActivator, CEntityInstance* pCaller, const CVariant* value, float flDelay);
 int GetTemplateSuffixNumber(const char* szName);

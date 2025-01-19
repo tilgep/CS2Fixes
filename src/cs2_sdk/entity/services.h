@@ -272,5 +272,16 @@ class CCSPlayer_ViewModelServices : public CPlayer_ViewModelServices
 {
 public:
 	DECLARE_SCHEMA_CLASS(CCSPlayer_ViewModelServices)
-	SCHEMA_FIELD_POINTER(CHandle<CBaseViewModel>, m_hViewModel) // m_hViewModel[3]
+	SCHEMA_FIELD_POINTER(CHandle<CBaseViewModel>, m_hViewModel) // CHandle<CBaseViewModel> m_hViewModel[3]
+
+	CBaseViewModel* GetViewModel(int iIndex = 0)
+	{
+		return m_hViewModel()[iIndex].Get();
+	}
+
+	void SetViewModel(int iIndex, CBaseViewModel* pViewModel)
+	{
+		m_hViewModel()[iIndex].Set(pViewModel);
+		pViewModel->m_nViewModelIndex = iIndex;
+	}
 };
