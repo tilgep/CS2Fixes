@@ -1120,6 +1120,9 @@ void ZR_ApplyKnockbackExplosion(CBaseEntity* pProjectile, CCSPlayerPawn* pVictim
 
 void ZR_FakePlayerDeath(CCSPlayerController* pAttackerController, CCSPlayerController* pVictimController, const char* szWeapon, bool bDontBroadcast)
 {
+	if (!pVictimController->m_bPawnIsAlive())
+		return;
+
 	IGameEvent* pEvent = g_gameEventManager->CreateEvent("player_death");
 
 	if (!pEvent)
@@ -1301,7 +1304,7 @@ void ZR_InfectMotherZombie(CCSPlayerController* pVictimController, std::vector<S
 
 	pVictimController->SwitchTeam(CS_TEAM_T);
 
-	ZR_FakePlayerDeath(pVictimController, pVictimController, "knife", true);
+	ZR_FakePlayerDeath(pVictimController, pVictimController, "knife", true); // not sent to clients
 
 	ZR_StripAndGiveKnife(pVictimPawn);
 
