@@ -86,7 +86,7 @@ FAKE_INT_CVAR(entwatch_score, "Score to give item holders (0 = dont change score
 void EWItemHandler::SetDefaultValues()
 {
 	type = EWHandlerType::Other;
-	mode = EWHandlerMode::Mode_None;
+	mode = EWHandlerMode::EWMode_None;
 	szHammerid = "";
 	szOutput = "";
 	flCooldown = 0.0;
@@ -276,7 +276,7 @@ void EWItemHandler::Use(float flCounterVal)
 
 	switch (mode)
 	{
-	case Mode_None:
+	case EWMode_None:
 		// Don't show uses in chat for this
 		return;
 	case Cooldown:
@@ -333,7 +333,7 @@ void EWItemHandler::UseCounter(float flCounterVal)
 	int newCurrentUses = 0;
 	switch (mode)
 	{
-		case Mode_None:
+		case EWMode_None:
 			// Don't show uses in chat for this
 			return;
 		case Cooldown:
@@ -422,7 +422,7 @@ void EWItemHandler::UpdateHudText()
 
 	switch (mode)
 	{
-	case Mode_None:
+	case EWMode_None:
 		szHudText = "+";
 		return;
 	case Cooldown:
@@ -856,7 +856,7 @@ std::string EWItemInstance::GetHandlerStateText()
 	bool first = true;
 	for (int i = 0; i < (vecHandlers).size(); i++)
 	{
-		if (!vecHandlers[i]->bShowHud)
+		if (!vecHandlers[i]->bShowHud || (int)(vecHandlers[i]->mode) >= EWMode_Last)
 			continue;
 
 		vecHandlers[i]->UpdateHudText();

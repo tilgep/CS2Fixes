@@ -53,11 +53,13 @@ enum EWHandlerType
 
 enum EWHandlerMode
 {
-	Mode_None = 1,
+	EWMode_None = 1,
 	Cooldown,				/* Infinite uses, cooldown between each use, or R if ready to use */
 	MaxUses,				/* Limited uses, can have a cooldown between each use, or E if empty */
 	CooldownAfterUses,		/* Cooldown after all uses, allowing for more uses */
 	CounterValue,			/* show math_counter value, or E if empty */
+
+	EWMode_Last,
 };
 
 enum EWDropReason
